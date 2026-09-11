@@ -115,6 +115,16 @@ describe('TimesheetsPage', () => {
     expect(screen.getByText('Fix bug')).toBeInTheDocument();
   });
 
+  it('shows an error message instead of crashing when the initial grid fetch fails', async () => {
+    vi.mocked(api.getTimesheetGrid).mockReset();
+    vi.mocked(api.getTimesheetGrid).mockRejectedValue(new Error('Network down'));
+
+    render(<TimesheetsPage />);
+
+    await screen.findByText('Network down');
+    expect(screen.getByText('Error')).toBeInTheDocument();
+  });
+
   it('calls getTimesheetGrid with the updated group when the day/week toggle is switched', async () => {
     render(<TimesheetsPage />);
 
