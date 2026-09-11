@@ -19,9 +19,22 @@ class Settings(BaseSettings):
 
     sync_default_cron: str
 
+    # Comma-separated list of origins allowed to call this API via CORS.
+    # There is no authentication in this app by design (internal network
+    # only) -- a wildcard origin would let any reachable webpage read
+    # timesheet data or trigger a sync, so this must be the frontend's
+    # actual origin(s), not "*".
+    cors_allowed_origins_raw: str = Field(
+        default="http://localhost:3000", validation_alias="CORS_ALLOWED_ORIGINS"
+    )
+
     @property
     def jira_project_keys(self) -> list[str]:
         return [key.strip() for key in self.jira_project_keys_raw.split(",") if key.strip()]
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins_raw.split(",") if origin.strip()]
 
 
 settings = Settings()

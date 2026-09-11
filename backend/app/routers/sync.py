@@ -46,7 +46,16 @@ def trigger_sync(db: Session = Depends(get_db)) -> SyncTriggerResponse:
     FastAPI's BackgroundTasks, whose callback only executes *after* the
     response is sent -- too late to read back a run id) and poll briefly for
     that row to appear, since the row is committed almost immediately.
+
+    Refuses to start a second run while one is already in progress: run_sync
+    reads/advances the single-row `sync_state` watermark, so two concurrent
+    runs would race on that row and could corrupt the watermark or double up
+    on Jira calls.
     """
+    running = _latest_run(db)
+    if running is not None and running.status == "running":
+        return SyncTriggerResponse(run_id=running.id, status=running.status)
+
     before_id = db.scalars(select(SyncRun.id).order_by(SyncRun.id.desc())).first() or 0
 
     thread = threading.Thread(target=_run_sync_in_background, daemon=True)

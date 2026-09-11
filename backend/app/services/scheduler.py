@@ -7,7 +7,6 @@ all the actual sync work and transaction management.
 
 from __future__ import annotations
 
-from croniter import croniter
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
@@ -23,10 +22,16 @@ _scheduler: BackgroundScheduler | None = None
 
 
 def validate_cron(cron_expression: str) -> None:
-    """Raise ValueError if `cron_expression` is not a valid cron string."""
+    """Raise ValueError if `cron_expression` is not a valid cron string.
+
+    Validates with the exact parser the scheduler consumes it with
+    (APScheduler's CronTrigger), not a different library (e.g. croniter) --
+    a syntax accepted by one but rejected by the other would persist an
+    unusable schedule that crashes every future scheduler start/reschedule.
+    """
     try:
-        croniter(cron_expression)
-    except (ValueError, KeyError) as exc:
+        CronTrigger.from_crontab(cron_expression)
+    except ValueError as exc:
         raise ValueError(f"Invalid cron expression {cron_expression!r}: {exc}") from exc
 
 
