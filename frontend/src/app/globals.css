@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --field-bg: #ffffff;
+  --border: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --surface-raised: #f1f5f9;
+  --surface-overlay: #ffffff;
+  --brand-2: #7c3aed;
+}
+
+:root[data-theme='dark'] {
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --success: #22c55e;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --bg: #0b1220;
+  --card: #131c2e;
+  --field-bg: #0f1829;
+  --border: #253045;
+  --text-primary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --surface-raised: #182338;
+  --surface-overlay: #1a2540;
+  --brand-2: #a78bfa;
+}
+
+/* Fixed, always-dark terminal palette used ONLY by the log viewer component.
+   Does not change with light/dark mode and must not be reused elsewhere. */
+:root {
+  --log-bg: #0a0e14;
+  --log-text: #d1d5db;
+  --log-text-muted: #6b7280;
+  --log-border: #1f2937;
+  --log-accent: #22d3ee;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans), sans-serif;
+}

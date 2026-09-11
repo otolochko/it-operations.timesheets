@@ -4,5 +4,6 @@ __pycache__/
 .venv/
 node_modules/
 .next/
+next-env.d.ts
 dist/
 *.log
