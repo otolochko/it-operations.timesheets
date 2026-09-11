@@ -46,6 +46,7 @@ export interface SyncRunSummary {
   worklogs_upserted: number;
   worklogs_deleted: number;
   error: string | null;
+  log_text: string | null;
 }
 
 export interface SyncStatusResponse {

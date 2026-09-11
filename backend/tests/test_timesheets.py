@@ -1,16 +1,15 @@
 from datetime import date, datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import event
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
-from app.core import db as db_module
-from app.core.db import Base, get_db
+from app.core.db import get_db
 from app.core.worklog_time import work_date_from_jira_json
 from app.main import app
 from app.models import Issue, Worklog
 from fastapi.testclient import TestClient
+from tests.conftest import build_sqlite_engine
 
 
 def _sqlite_date_trunc(unit: str, value: str) -> str:
@@ -25,19 +24,20 @@ def _sqlite_date_trunc(unit: str, value: str) -> str:
     return monday.isoformat()
 
 
-@pytest.fixture
-def engine():
-    eng = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(eng, "connect")
+def _register_date_trunc(engine):
+    @event.listens_for(engine, "connect")
     def _register(dbapi_connection, _):
         dbapi_connection.create_function("date_trunc", 2, _sqlite_date_trunc)
 
-    Base.metadata.create_all(eng)
+
+@pytest.fixture
+def engine(monkeypatch):
+    # The app's startup hook (scheduler start -> get_or_create_schedule) opens
+    # its own session via app.core.db.SessionLocal, bypassing the get_db
+    # dependency override in client() below -- build_sqlite_engine points
+    # both at the same engine so TestClient's startup event doesn't hit an
+    # empty, unrelated database.
+    eng = build_sqlite_engine(monkeypatch, on_create=_register_date_trunc)
     yield eng
     eng.dispose()
 
@@ -48,32 +48,8 @@ def db(engine):
         yield session
 
 
-@pytest.fixture(autouse=True)
-def _shutdown_scheduler_after_test():
-    # client() triggers the app's real startup hook, which starts a live
-    # BackgroundScheduler -- stop it so it doesn't leak into other tests.
-    yield
-    from app.services import scheduler as scheduler_module
-
-    scheduler = scheduler_module.get_scheduler()
-    if scheduler is not None and scheduler.running:
-        scheduler.shutdown(wait=False)
-    scheduler_module._scheduler = None
-
-
 @pytest.fixture
-def client(engine, monkeypatch):
-    # The app's startup hook (scheduler start -> get_or_create_schedule) opens
-    # its own session via app.core.db.SessionLocal, bypassing the get_db
-    # dependency override below -- point it at the same migrated engine so
-    # TestClient's startup event doesn't hit an empty, unrelated database.
-    from sqlalchemy.orm import sessionmaker
-
-    monkeypatch.setattr(db_module, "engine", engine)
-    monkeypatch.setattr(
-        db_module, "SessionLocal", sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    )
-
+def client(engine):
     def override_get_db():
         with Session(engine, autoflush=False) as session:
             yield session

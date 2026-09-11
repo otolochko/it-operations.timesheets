@@ -111,16 +111,14 @@ export default function TimesheetsPage() {
             />
           </FormField>
           <div className="flex gap-2">
-            {group === 'day' ? (
-              <PrimaryButton onClick={() => setGroup('day')}>Day</PrimaryButton>
-            ) : (
-              <SecondaryButton onClick={() => setGroup('day')}>Day</SecondaryButton>
-            )}
-            {group === 'week' ? (
-              <PrimaryButton onClick={() => setGroup('week')}>Week</PrimaryButton>
-            ) : (
-              <SecondaryButton onClick={() => setGroup('week')}>Week</SecondaryButton>
-            )}
+            {(['day', 'week'] as const).map((option) => {
+              const ToggleButton = group === option ? PrimaryButton : SecondaryButton;
+              return (
+                <ToggleButton key={option} onClick={() => setGroup(option)}>
+                  {option === 'day' ? 'Day' : 'Week'}
+                </ToggleButton>
+              );
+            })}
           </div>
         </div>
       </PanelCard>

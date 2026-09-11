@@ -3,16 +3,13 @@ import { PanelCard } from './PanelCard';
 import { SecondaryButton } from './Buttons';
 import { StatusBadge } from './StatusBadge';
 import type { IssueDrilldownResponse } from '@/lib/api';
+import { formatHours } from '@/lib/format';
 
 export interface IssueDrilldownPanelProps {
   data: IssueDrilldownResponse | null;
   loading: boolean;
   error: string | null;
   onClose: () => void;
-}
-
-function formatHours(seconds: number): string {
-  return (seconds / 3600).toFixed(1);
 }
 
 export function IssueDrilldownPanel({

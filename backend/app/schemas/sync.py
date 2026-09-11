@@ -11,6 +11,7 @@ class SyncRunSummary(BaseModel):
     worklogs_upserted: int
     worklogs_deleted: int
     error: str | None
+    log_text: str | None
 
     model_config = {"from_attributes": True}
 

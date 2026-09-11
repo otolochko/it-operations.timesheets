@@ -5,16 +5,14 @@ from datetime import datetime, timezone
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
-from sqlalchemy.pool import StaticPool
 
 from app.core import db as db_module
-from app.core.db import Base
 from app.models import SyncRun
 from app.routers import sync as sync_router
 from app.services import scheduler as scheduler_module
 from apscheduler.triggers.cron import CronTrigger
+from tests.conftest import build_sqlite_engine
 
 
 @pytest.fixture(autouse=True)
@@ -26,28 +24,9 @@ def shared_sqlite_engine(monkeypatch):
     thread its own separate database, so we swap in a StaticPool engine
     (one shared connection) for the duration of each test.
     """
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    SessionLocal = __import__("sqlalchemy.orm", fromlist=["sessionmaker"]).sessionmaker(
-        bind=engine, autoflush=False, autocommit=False
-    )
-    monkeypatch.setattr(db_module, "engine", engine)
-    monkeypatch.setattr(db_module, "SessionLocal", SessionLocal)
+    engine = build_sqlite_engine(monkeypatch)
     yield
     engine.dispose()
-
-
-@pytest.fixture(autouse=True)
-def reset_global_scheduler():
-    yield
-    scheduler = scheduler_module.get_scheduler()
-    if scheduler is not None and scheduler.running:
-        scheduler.shutdown(wait=False)
-    scheduler_module._scheduler = None
 
 
 @pytest.fixture

@@ -25,10 +25,6 @@ function badgeForStatus(status: SyncRunSummary['status']): 'info' | 'success' | 
   return 'info';
 }
 
-function synthesizeLogText(run: SyncRunSummary): string {
-  return `Run #${run.id}: ${run.status}, upserted ${run.worklogs_upserted}, deleted ${run.worklogs_deleted}`;
-}
-
 export function SyncStatusPanel() {
   const [status, setStatus] = React.useState<SyncStatusResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -114,7 +110,7 @@ export function SyncStatusPanel() {
             <p className="text-sm text-text-muted">No sync runs yet. Trigger one to get started.</p>
           )}
 
-          <LogViewer logText={latestRun ? synthesizeLogText(latestRun) : null} />
+          <LogViewer logText={latestRun?.log_text} />
         </div>
       )}
     </PanelCard>

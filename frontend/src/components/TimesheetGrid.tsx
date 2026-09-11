@@ -1,14 +1,11 @@
 import * as React from 'react';
 import { PanelCard } from './PanelCard';
 import type { TimesheetCell } from '@/lib/api';
+import { formatHours } from '@/lib/format';
 
 export interface TimesheetGridProps {
   cells: TimesheetCell[];
   onCellClick: (cell: TimesheetCell) => void;
-}
-
-function formatHours(seconds: number): string {
-  return (seconds / 3600).toFixed(1);
 }
 
 export function TimesheetGrid({ cells, onCellClick }: TimesheetGridProps) {

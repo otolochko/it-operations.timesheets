@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -27,6 +28,14 @@ router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 def _latest_run(db: Session) -> SyncRun | None:
     return db.scalars(select(SyncRun).order_by(SyncRun.id.desc())).first()
+
+
+def _schedule_response(schedule: SyncSchedule) -> SyncScheduleResponse:
+    return SyncScheduleResponse(
+        cron_expression=schedule.cron_expression,
+        project_keys=[key for key in schedule.project_keys.split(",") if key],
+        updated_at=schedule.updated_at,
+    )
 
 
 def _run_sync_in_background() -> None:
@@ -89,19 +98,13 @@ def get_status(db: Session = Depends(get_db)) -> SyncStatusResponse:
 @router.get("/schedule", response_model=SyncScheduleResponse)
 def get_schedule(db: Session = Depends(get_db)) -> SyncScheduleResponse:
     schedule = get_or_create_schedule(db)
-    return SyncScheduleResponse(
-        cron_expression=schedule.cron_expression,
-        project_keys=[key for key in schedule.project_keys.split(",") if key],
-        updated_at=schedule.updated_at,
-    )
+    return _schedule_response(schedule)
 
 
 @router.put("/schedule", response_model=SyncScheduleResponse)
 def update_schedule(
     body: SyncScheduleUpdateRequest, db: Session = Depends(get_db)
 ) -> SyncScheduleResponse:
-    from datetime import datetime, timezone
-
     try:
         validate_cron(body.cron_expression)
     except ValueError as exc:
@@ -119,8 +122,4 @@ def update_schedule(
     if scheduler is not None:
         reschedule(scheduler, schedule.cron_expression)
 
-    return SyncScheduleResponse(
-        cron_expression=schedule.cron_expression,
-        project_keys=[key for key in schedule.project_keys.split(",") if key],
-        updated_at=schedule.updated_at,
-    )
+    return _schedule_response(schedule)

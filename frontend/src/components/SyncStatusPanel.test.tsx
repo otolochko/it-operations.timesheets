@@ -40,6 +40,7 @@ describe('SyncStatusPanel', () => {
         worklogs_upserted: 42,
         worklogs_deleted: 3,
         error: null,
+        log_text: null,
       },
       is_running: false,
     });
@@ -61,6 +62,7 @@ describe('SyncStatusPanel', () => {
         worklogs_upserted: 0,
         worklogs_deleted: 0,
         error: 'Jira API timeout',
+        log_text: 'Run failed: Jira API timeout',
       },
       is_running: false,
     });
@@ -85,6 +87,7 @@ describe('SyncStatusPanel', () => {
           worklogs_upserted: 0,
           worklogs_deleted: 0,
           error: null,
+          log_text: 'Sync started',
         },
         is_running: true,
       })
@@ -97,6 +100,7 @@ describe('SyncStatusPanel', () => {
           worklogs_upserted: 5,
           worklogs_deleted: 0,
           error: null,
+          log_text: 'Sync completed successfully',
         },
         is_running: false,
       });

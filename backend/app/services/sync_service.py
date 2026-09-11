@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -127,15 +128,37 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
             in_scope.append((worklog_json, issue_json))
 
         now = _utcnow()
-        issue_rows: dict[str, Issue] = {}
+
+        # Preload every Issue/Worklog row this run will touch in one query
+        # each, instead of one SELECT per worklog -- a sync batch can cover
+        # hundreds of worklogs across a much smaller set of issues.
+        issue_ids = {str(worklog_json["issueId"]) for worklog_json, _ in in_scope}
+        issue_rows: dict[str, Issue] = (
+            {issue.id: issue for issue in db.scalars(select(Issue).where(Issue.id.in_(issue_ids)))}
+            if issue_ids
+            else {}
+        )
+
+        worklog_ids = {str(worklog_json["id"]) for worklog_json, _ in in_scope}
+        deleted_ids = {_change_id(change) for change in deleted_changes}
+        all_worklog_ids = worklog_ids | deleted_ids
+        worklog_rows: dict[str, Worklog] = (
+            {
+                worklog.id: worklog
+                for worklog in db.scalars(select(Worklog).where(Worklog.id.in_(all_worklog_ids)))
+            }
+            if all_worklog_ids
+            else {}
+        )
+
         for worklog_json, issue_json in in_scope:
             issue_id = str(worklog_json["issueId"])
             fields = issue_json.get("fields", {})
-            issue = issue_rows.get(issue_id) or db.get(Issue, issue_id)
+            issue = issue_rows.get(issue_id)
             if issue is None:
                 issue = Issue(id=issue_id)
                 db.add(issue)
-            issue_rows[issue_id] = issue
+                issue_rows[issue_id] = issue
             issue.key = str(issue_json["key"])
             issue.project_key = str(fields["project"]["key"])
             issue.summary = str(fields.get("summary") or "")
@@ -147,10 +170,11 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
                 raise ValueError("Jira worklog 'started' must include a numeric offset")
 
             worklog_id = str(worklog_json["id"])
-            worklog = db.get(Worklog, worklog_id)
+            worklog = worklog_rows.get(worklog_id)
             if worklog is None:
                 worklog = Worklog(id=worklog_id)
                 db.add(worklog)
+                worklog_rows[worklog_id] = worklog
             author = worklog_json.get("author") or {}
             worklog.issue_id = issue_id
             worklog.author_account_id = str(author["accountId"])
@@ -163,7 +187,7 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
 
         deleted_count = 0
         for change in deleted_changes:
-            existing = db.get(Worklog, _change_id(change))
+            existing = worklog_rows.get(_change_id(change))
             if existing is not None:
                 db.delete(existing)
                 deleted_count += 1

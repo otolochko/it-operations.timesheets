@@ -7,6 +7,8 @@ all the actual sync work and transaction management.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.orm import Session
@@ -38,8 +40,6 @@ def validate_cron(cron_expression: str) -> None:
 def get_or_create_schedule(db: Session) -> SyncSchedule:
     schedule = db.get(SyncSchedule, 1)
     if schedule is None:
-        from datetime import datetime, timezone
-
         schedule = SyncSchedule(
             id=1,
             cron_expression=settings.sync_default_cron,
