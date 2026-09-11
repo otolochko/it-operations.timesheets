@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { DM_Sans, IBM_Plex_Mono } from 'next/font/google';
+import { NavSidebar } from '@/components/NavSidebar';
 import './globals.css';
 
 const dmSans = DM_Sans({
@@ -26,7 +27,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${dmSans.variable} ${ibmPlexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <div className="flex min-h-screen">
+          <NavSidebar />
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
+      </body>
     </html>
   );
 }
