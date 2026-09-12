@@ -19,3 +19,9 @@ class SyncRun(Base):
     worklogs_deleted: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     log_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # progress_total is null while the current phase's size is not yet known
+    # (e.g. paginating a Jira feed of unknown length) -- the frontend renders
+    # an indeterminate progress bar in that case.
+    progress_phase: Mapped[str | None] = mapped_column(String, nullable=True)
+    progress_current: Mapped[int] = mapped_column(Integer, default=0)
+    progress_total: Mapped[int | None] = mapped_column(Integer, nullable=True)

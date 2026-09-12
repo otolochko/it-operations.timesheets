@@ -47,6 +47,9 @@ export interface SyncRunSummary {
   worklogs_deleted: number;
   error: string | null;
   log_text: string | null;
+  progress_phase: string | null;
+  progress_current: number;
+  progress_total: number | null;
 }
 
 export interface SyncStatusResponse {
@@ -62,12 +65,14 @@ export interface SyncTriggerResponse {
 export interface SyncScheduleResponse {
   cron_expression: string;
   project_keys: string[];
+  jql_filter: string | null;
   updated_at: string;
 }
 
 export interface SyncScheduleUpdateRequest {
   cron_expression: string;
   project_keys?: string[];
+  jql_filter?: string;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

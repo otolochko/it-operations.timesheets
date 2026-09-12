@@ -138,7 +138,6 @@ All configuration is driven by environment variables defined in `.env`:
 | `JIRA_MAX_RETRIES` | Maximum retry attempts for rate-limited requests | `5` |
 | `JIRA_RETRY_BASE_SECONDS` | Initial backoff sleep delay in seconds | `1` |
 | `JIRA_PROJECT_KEYS` | Comma-separated Jira project keys to sync | `PROJ1,PROJ2` |
-| `JIRA_WORKLOG_JQL` | Optional JQL filter clause (reserved) | `""` |
 
 ### Synchronization and CORS
 

@@ -51,7 +51,6 @@ Operational router, universal invariants, execution commands, and environment de
 | `JIRA_MAX_RETRIES` | Maximum retry attempts for failed/throttled Jira HTTP requests |
 | `JIRA_RETRY_BASE_SECONDS` | Initial backoff delay in seconds for exponential retry sleep |
 | `JIRA_PROJECT_KEYS` | Comma-separated list of Jira project keys to sync (e.g. `PROJ1,PROJ2`) |
-| `JIRA_WORKLOG_JQL` | Optional JQL filter clause (reserved for future use) |
 | `SYNC_DEFAULT_CRON` | Fallback 5-field cron expression for background sync (e.g. `0 * * * *`) |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed origins (defaults to `http://localhost:3000`, never `*`) |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend URL consumed by frontend client (defaults to `http://localhost:8000`) |

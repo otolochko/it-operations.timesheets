@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     # Raw comma-separated string from JIRA_PROJECT_KEYS; use `jira_project_keys`
     # below to get it as a parsed list.
     jira_project_keys_raw: str = Field(validation_alias="JIRA_PROJECT_KEYS")
-    jira_worklog_jql: str = ""
 
     sync_default_cron: str
 

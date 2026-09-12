@@ -92,17 +92,25 @@ class JiraClient:
         raise RuntimeError("unreachable")
 
     def _get_change_pages(
-        self, endpoint: str, since_epoch_millis: int
+        self,
+        endpoint: str,
+        since_epoch_millis: int,
+        *,
+        on_page: Callable[[int, int], None] | None = None,
     ) -> tuple[list[dict], int | None]:
         url = f"{self.base_url}/rest/api/3/worklog/{endpoint}"
         params: dict[str, int] | None = {"since": since_epoch_millis}
         values: list[dict] = []
         max_until: int | None = None
+        page = 0
 
         while True:
             response = self._request("GET", url, params=params)
             payload = response.json()
             values.extend(payload.get("values", []))
+            page += 1
+            if on_page is not None:
+                on_page(page, len(values))
             until = payload.get("until")
             if until is not None:
                 until = int(until)
@@ -117,24 +125,41 @@ class JiraClient:
         return values, max_until
 
     def get_updated_worklog_ids(
-        self, since_epoch_millis: int
+        self,
+        since_epoch_millis: int,
+        *,
+        on_page: Callable[[int, int], None] | None = None,
     ) -> tuple[list[dict], int | None]:
-        return self._get_change_pages("updated", since_epoch_millis)
+        return self._get_change_pages("updated", since_epoch_millis, on_page=on_page)
 
-    def get_deleted_worklog_ids(self, since_epoch_millis: int) -> list[dict]:
+    def get_deleted_worklog_ids(
+        self,
+        since_epoch_millis: int,
+        *,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[dict]:
         values, self.last_deleted_until = self._get_change_pages(
-            "deleted", since_epoch_millis
+            "deleted", since_epoch_millis, on_page=on_page
         )
         return values
 
-    def get_worklogs_by_ids(self, worklog_ids: list[str]) -> list[dict]:
+    def get_worklogs_by_ids(
+        self,
+        worklog_ids: list[str],
+        *,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[dict]:
         worklogs: list[dict] = []
         url = f"{self.base_url}/rest/api/3/worklog/list"
+        page = 0
         for start in range(0, len(worklog_ids), 1000):
             response = self._request(
                 "POST", url, json={"ids": worklog_ids[start : start + 1000]}
             )
             worklogs.extend(response.json())
+            page += 1
+            if on_page is not None:
+                on_page(page, len(worklogs))
         return worklogs
 
     def get_issue(self, issue_id: str) -> dict | None:
@@ -148,3 +173,38 @@ class JiraClient:
         if response.status_code == 404:
             return None
         return response.json()
+
+    def search_issue_ids(
+        self, jql: str, *, on_page: Callable[[int, int], None] | None = None
+    ) -> set[str]:
+        url = f"{self.base_url}/rest/api/3/search/jql"
+        issue_ids: set[str] = set()
+        page = 0
+        next_page_token: str | None = None
+
+        while True:
+            body: dict[str, Any] = {"jql": jql, "fields": ["id"], "maxResults": 5000}
+            if next_page_token is not None:
+                body["nextPageToken"] = next_page_token
+            response = self._request("POST", url, json=body)
+            payload = response.json()
+            issue_ids.update(str(issue["id"]) for issue in payload.get("issues", []))
+            page += 1
+            if on_page is not None:
+                on_page(page, len(issue_ids))
+
+            next_page_token = payload.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return issue_ids
+
+    def validate_jql(self, jql: str) -> None:
+        url = f"{self.base_url}/rest/api/3/search/jql"
+        response = self._client.post(
+            url, json={"jql": jql, "fields": [], "maxResults": 1}
+        )
+        if response.status_code == 400:
+            errors = response.json().get("errorMessages") or ["Invalid JQL"]
+            raise ValueError("; ".join(errors))
+        response.raise_for_status()

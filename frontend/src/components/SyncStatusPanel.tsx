@@ -25,6 +25,35 @@ function badgeForStatus(status: SyncRunSummary['status']): 'info' | 'success' | 
   return 'info';
 }
 
+interface ProgressBarProps {
+  phase: string;
+  current: number;
+  total: number | null;
+}
+
+function ProgressBar({ phase, current, total }: ProgressBarProps) {
+  const percent = total ? Math.min(100, Math.round((current / total) * 100)) : null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-xs text-text-muted">
+        <span>{phase}</span>
+        <span>{total ? `${current}/${total} (${percent}%)` : `${current}`}</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-field-bg">
+        <div
+          className={
+            percent === null
+              ? 'h-full w-1/3 animate-pulse rounded-full bg-accent'
+              : 'h-full rounded-full bg-accent transition-[width]'
+          }
+          style={percent !== null ? { width: `${percent}%` } : undefined}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SyncStatusPanel() {
   const [status, setStatus] = React.useState<SyncStatusResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -88,6 +117,14 @@ export function SyncStatusPanel() {
               {isRunning ? 'Sync in progress...' : 'Sync now'}
             </PrimaryButton>
           </div>
+
+          {isRunning && latestRun?.progress_phase ? (
+            <ProgressBar
+              phase={latestRun.progress_phase}
+              current={latestRun.progress_current}
+              total={latestRun.progress_total}
+            />
+          ) : null}
 
           {latestRun ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-text-primary">

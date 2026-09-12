@@ -41,6 +41,9 @@ describe('SyncStatusPanel', () => {
         worklogs_deleted: 3,
         error: null,
         log_text: null,
+        progress_phase: null,
+        progress_current: 0,
+        progress_total: null,
       },
       is_running: false,
     });
@@ -63,6 +66,9 @@ describe('SyncStatusPanel', () => {
         worklogs_deleted: 0,
         error: 'Jira API timeout',
         log_text: 'Run failed: Jira API timeout',
+        progress_phase: null,
+        progress_current: 0,
+        progress_total: null,
       },
       is_running: false,
     });
@@ -71,6 +77,30 @@ describe('SyncStatusPanel', () => {
 
     await waitFor(() => expect(screen.getByText('failed')).toBeInTheDocument());
     expect(screen.getByText('Jira API timeout')).toBeInTheDocument();
+  });
+
+  it('shows a progress bar with phase and counts while a run is in progress', async () => {
+    mockedApi.getSyncStatus.mockResolvedValue({
+      latest_run: {
+        id: 4,
+        started_at: '2026-09-11T10:00:00Z',
+        finished_at: null,
+        status: 'running',
+        worklogs_upserted: 0,
+        worklogs_deleted: 0,
+        error: null,
+        log_text: 'Fetching issue metadata: 10/40',
+        progress_phase: 'Fetching issue metadata',
+        progress_current: 10,
+        progress_total: 40,
+      },
+      is_running: true,
+    });
+
+    render(<SyncStatusPanel />);
+
+    await waitFor(() => expect(screen.getByText('Fetching issue metadata')).toBeInTheDocument());
+    expect(screen.getByText('10/40 (25%)')).toBeInTheDocument();
   });
 
   it('triggers sync, disables the button while running, and re-enables when polling shows completion', async () => {
@@ -88,6 +118,9 @@ describe('SyncStatusPanel', () => {
           worklogs_deleted: 0,
           error: null,
           log_text: 'Sync started',
+          progress_phase: null,
+          progress_current: 0,
+          progress_total: null,
         },
         is_running: true,
       })
@@ -101,6 +134,9 @@ describe('SyncStatusPanel', () => {
           worklogs_deleted: 0,
           error: null,
           log_text: 'Sync completed successfully',
+          progress_phase: null,
+          progress_current: 0,
+          progress_total: null,
         },
         is_running: false,
       });

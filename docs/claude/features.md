@@ -28,16 +28,17 @@ Provides an interactive matrix of Jira worklog hours aggregated by author across
 
 Controls and monitors background synchronization of Jira Cloud worklogs into PostgreSQL, including manual trigger with live status polling and runtime-configurable cron scheduling. The trigger operation runs asynchronously on a background thread while the API returns immediately.
 
-- **Router**: `backend/app/routers/sync.py` — endpoints: `POST /api/sync/worklogs` (spawns background sync), `GET /api/sync/status` (fetches latest run), `GET /api/sync/schedule` (fetches cron schedule), `PUT /api/sync/schedule` (updates cron schedule and project keys)
-- **Service**: `backend/app/services/sync_service.py` (`run_sync()`), `backend/app/services/scheduler.py` (`validate_cron()`, `get_or_create_schedule()`, `reschedule()`, `start_scheduler()`, `get_scheduler()`)
+- **Router**: `backend/app/routers/sync.py` — endpoints: `POST /api/sync/worklogs` (spawns background sync), `GET /api/sync/status` (fetches latest run), `GET /api/sync/schedule` (fetches cron schedule), `PUT /api/sync/schedule` (updates cron schedule, project keys, and JQL filter)
+- **Service**: `backend/app/services/sync_service.py` (`run_sync()`, `get_or_create_schedule()`), `backend/app/services/scheduler.py` (`validate_cron()`, `reschedule()`, `start_scheduler()`, `get_scheduler()`)
 - **Frontend**: `frontend/src/app/sync/page.tsx` (supported by `frontend/src/components/SyncStatusPanel.tsx` and `frontend/src/components/SyncScheduleForm.tsx`)
 - **Schemas**: `backend/app/schemas/sync.py` — `SyncRunSummary`, `SyncStatusResponse`, `SyncTriggerResponse`, `SyncScheduleResponse`, `SyncScheduleUpdateRequest`
 - **Gotchas**:
   - `POST /api/sync/worklogs` enforces single-flight concurrency: if the latest `SyncRun` is currently marked `running`, it returns the active run immediately and refuses to launch a second run to prevent race conditions on the `sync_state` watermark cursor.
   - The endpoint spawns `run_sync` on a daemon `threading.Thread` rather than using FastAPI's `BackgroundTasks`, because `BackgroundTasks` callbacks only run after the HTTP response has been sent, preventing the endpoint from returning the newly created `run_id`.
   - `PUT /api/sync/schedule` validates cron strings using APScheduler's `CronTrigger.from_crontab()`. Validating with external libraries like `croniter` creates syntax incompatibilities that can accept expressions that crash APScheduler upon startup or rescheduling.
-  - Jira Cloud `worklog/updated` and `worklog/deleted` feeds are global across all projects. Sync retrieves changes instance-wide and filters worklogs by configured project keys only after fetching issue metadata.
-  - `sync_runs.log_text` is stored in the database but omitted from the `SyncRunSummary` response schema; `frontend/src/components/SyncStatusPanel.tsx` synthesizes a one-line execution summary for display in `LogViewer.tsx`.
+  - `PUT /api/sync/schedule` also validates a non-empty `jql_filter` with a live Jira call (`JiraClient.validate_jql`, `/rest/api/3/search/jql` with `maxResults=0`) so a syntactically invalid JQL clause is rejected with `400` at save time instead of failing every future sync run.
+  - Jira Cloud `worklog/updated` and `worklog/deleted` feeds are global across all projects. Sync retrieves changes instance-wide, then scopes worklogs to `SyncSchedule.jql_filter` (resolved once per run via `JiraClient.search_issue_ids`) when set, or `SyncSchedule.project_keys` otherwise — a non-empty `jql_filter` fully replaces the project-key filter for that run.
+  - `sync_runs.log_text` is appended to and committed incrementally during a run (via `_append_log`, including per-page progress for the worklog change feed and JQL search), so `frontend/src/components/SyncStatusPanel.tsx`'s 2s polling shows live progress in `LogViewer.tsx`, not just a final summary.
   - Incremental sync watermarks advance strictly upon complete transaction success. If an error occurs during sync, database changes are rolled back, `sync_state.last_watermark` remains unchanged, and the failed run is logged.
 
 For architectural flow details, see [`architecture.md`](architecture.md). For asynchronous task execution mechanics, see [`async-tasks.md`](async-tasks.md). For frontend component composition, see [`frontend.md`](frontend.md).

@@ -10,7 +10,23 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.jira_http import JiraClient
 from app.core.worklog_time import work_date_from_jira_json
-from app.models import Issue, SyncRun, SyncState, Worklog
+from app.models import Issue, SyncRun, SyncSchedule, SyncState, Worklog
+
+
+def get_or_create_schedule(db: Session) -> SyncSchedule:
+    schedule = db.get(SyncSchedule, 1)
+    if schedule is None:
+        schedule = SyncSchedule(
+            id=1,
+            cron_expression=settings.sync_default_cron,
+            project_keys=",".join(settings.jira_project_keys),
+            jql_filter=None,
+            updated_at=_utcnow(),
+        )
+        db.add(schedule)
+        db.commit()
+        db.refresh(schedule)
+    return schedule
 
 
 def _utcnow() -> datetime:
@@ -44,8 +60,26 @@ def _change_id(change: dict) -> str:
     return str(value)
 
 
-def _append_log(run: SyncRun, message: str) -> None:
+def _append_log(db: Session, run: SyncRun, message: str) -> None:
     run.log_text = f"{run.log_text or ''}{message}\n"
+    db.commit()
+
+
+def _progress(
+    db: Session,
+    run: SyncRun,
+    *,
+    phase: str,
+    current: int,
+    total: int | None,
+    log: str | None = None,
+) -> None:
+    run.progress_phase = phase
+    run.progress_current = current
+    run.progress_total = total
+    if log is not None:
+        run.log_text = f"{run.log_text or ''}{log}\n"
+    db.commit()
 
 
 def _issue_key_from_worklog(worklog: dict) -> str | None:
@@ -85,6 +119,8 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
     owns_client = jira_client is None
 
     try:
+        schedule = get_or_create_schedule(db)
+
         state = db.get(SyncState, 1)
         if state is None:
             state = SyncState(id=1, last_watermark=None)
@@ -94,38 +130,127 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
             db.commit()
 
         since = _epoch_millis(state.last_watermark)
-        updated_changes, updated_until = client.get_updated_worklog_ids(since)
-        _append_log(run, f"Fetched {len(updated_changes)} updated worklog ids")
+        updated_changes, updated_until = client.get_updated_worklog_ids(
+            since,
+            on_page=lambda page, count: _progress(
+                db,
+                run,
+                phase="Fetching updated worklog ids",
+                current=count,
+                total=None,
+                log=f"Updated worklog ids: page {page}, {count} so far",
+            ),
+        )
+        _append_log(db, run, f"Fetched {len(updated_changes)} updated worklog ids")
 
-        deleted_changes = client.get_deleted_worklog_ids(since)
-        _append_log(run, f"Fetched {len(deleted_changes)} deleted worklog ids")
+        deleted_changes = client.get_deleted_worklog_ids(
+            since,
+            on_page=lambda page, count: _progress(
+                db,
+                run,
+                phase="Fetching deleted worklog ids",
+                current=count,
+                total=None,
+                log=f"Deleted worklog ids: page {page}, {count} so far",
+            ),
+        )
+        _append_log(db, run, f"Fetched {len(deleted_changes)} deleted worklog ids")
 
         updated_ids = list(dict.fromkeys(_change_id(item) for item in updated_changes))
-        worklogs = client.get_worklogs_by_ids(updated_ids)
-        _append_log(run, f"Fetched {len(worklogs)} full worklogs")
+        worklogs = client.get_worklogs_by_ids(
+            updated_ids,
+            on_page=lambda page, count: _progress(
+                db,
+                run,
+                phase="Fetching full worklogs",
+                current=count,
+                total=len(updated_ids),
+                log=f"Fetched worklogs: batch {page}, {count} so far",
+            ),
+        )
+        _append_log(db, run, f"Fetched {len(worklogs)} full worklogs")
 
-        allowed_projects = set(settings.jira_project_keys)
-        in_scope: list[tuple[dict, dict]] = []
-        issue_payloads: dict[str, dict | None] = {}
+        allowed_issue_ids: set[str] | None = None
+        if schedule.jql_filter:
+            allowed_issue_ids = client.search_issue_ids(
+                schedule.jql_filter,
+                on_page=lambda page, count: _progress(
+                    db,
+                    run,
+                    phase="Resolving JQL filter",
+                    current=count,
+                    total=None,
+                    log=f"JQL search: page {page}, {count} issues so far",
+                ),
+            )
+            _append_log(db, run, f"JQL filter matched {len(allowed_issue_ids)} issues")
+            allowed_projects: set[str] = set()
+        else:
+            allowed_projects = {key for key in schedule.project_keys.split(",") if key}
 
+        # Resolve the set of unique issue ids this run needs metadata for
+        # up front, so the fetch loop below has a known total for progress
+        # reporting instead of an indeterminate count.
+        candidate_issue_ids: list[str] = []
+        seen_issue_ids: set[str] = set()
         for worklog_json in worklogs:
             issue_id = str(worklog_json["issueId"])
-            issue_key = _issue_key_from_worklog(worklog_json)
-            project_hint = _project_from_key(issue_key)
-            if allowed_projects and project_hint and project_hint not in allowed_projects:
+            if issue_id in seen_issue_ids:
                 continue
 
+            if allowed_issue_ids is not None:
+                if issue_id not in allowed_issue_ids:
+                    continue
+            else:
+                issue_key = _issue_key_from_worklog(worklog_json)
+                project_hint = _project_from_key(issue_key)
+                if allowed_projects and project_hint and project_hint not in allowed_projects:
+                    continue
+
+            seen_issue_ids.add(issue_id)
+            candidate_issue_ids.append(issue_id)
+
+        issue_payloads: dict[str, dict | None] = {}
+        total_issues = len(candidate_issue_ids)
+        # Absolute cadence, not a percentage of total: on a large first sync
+        # (thousands of issues), a percentage-based step could stay silent
+        # for minutes even though every request is succeeding.
+        progress_step = min(25, max(1, total_issues))
+        for i, issue_id in enumerate(candidate_issue_ids, start=1):
+            issue_payloads[issue_id] = client.get_issue(issue_id)
+            if i % progress_step == 0 or i == total_issues:
+                _progress(
+                    db,
+                    run,
+                    phase="Fetching issue metadata",
+                    current=i,
+                    total=total_issues,
+                    log=f"Fetching issue metadata: {i}/{total_issues}",
+                )
+
+        in_scope: list[tuple[dict, dict]] = []
+        for worklog_json in worklogs:
+            issue_id = str(worklog_json["issueId"])
             if issue_id not in issue_payloads:
-                issue_payloads[issue_id] = client.get_issue(issue_id)
+                continue
             issue_json = issue_payloads[issue_id]
             if issue_json is None:
                 continue
 
-            fields = issue_json.get("fields", {})
-            project_key = str(fields["project"]["key"])
-            if allowed_projects and project_key not in allowed_projects:
-                continue
+            if allowed_issue_ids is None:
+                fields = issue_json.get("fields", {})
+                project_key = str(fields["project"]["key"])
+                if allowed_projects and project_key not in allowed_projects:
+                    continue
             in_scope.append((worklog_json, issue_json))
+
+        _progress(
+            db,
+            run,
+            phase="Writing changes to database",
+            current=0,
+            total=len(in_scope),
+        )
 
         now = _utcnow()
 
@@ -194,8 +319,8 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
 
         run.worklogs_upserted = len(in_scope)
         run.worklogs_deleted = deleted_count
-        _append_log(run, f"Upserted {len(in_scope)} worklogs")
-        _append_log(run, f"Deleted {deleted_count} worklogs")
+        _append_log(db, run, f"Upserted {len(in_scope)} worklogs")
+        _append_log(db, run, f"Deleted {deleted_count} worklogs")
 
         deleted_until = getattr(client, "last_deleted_until", None)
         until_values = [v for v in (updated_until, deleted_until) if v is not None]
@@ -204,7 +329,9 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
 
         run.status = "success"
         run.finished_at = _utcnow()
-        _append_log(run, "Sync completed successfully")
+        run.progress_phase = "Completed"
+        run.progress_current = run.progress_total or 0
+        _append_log(db, run, "Sync completed successfully")
         db.commit()
         db.refresh(run)
         return run
@@ -218,7 +345,7 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         failed_run.finished_at = _utcnow()
         failed_run.error = str(exc) or exc.__class__.__name__
         failed_run.log_text = progress_log
-        _append_log(failed_run, f"Sync failed: {failed_run.error}")
+        _append_log(db, failed_run, f"Sync failed: {failed_run.error}")
         db.commit()
         raise
     finally:

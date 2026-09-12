@@ -21,11 +21,13 @@ describe('SyncScheduleForm', () => {
     mockedApi.getSyncSchedule.mockResolvedValue({
       cron_expression: '0 * * * *',
       project_keys: ['ABC', 'DEF'],
+      jql_filter: null,
       updated_at: '2026-09-01T00:00:00Z',
     });
     mockedApi.updateSyncSchedule.mockResolvedValue({
       cron_expression: '0 0 * * *',
       project_keys: ['ABC'],
+      jql_filter: null,
       updated_at: '2026-09-11T00:00:00Z',
     });
 
@@ -44,15 +46,51 @@ describe('SyncScheduleForm', () => {
     expect(mockedApi.updateSyncSchedule).toHaveBeenCalledWith({
       cron_expression: '0 0 * * *',
       project_keys: ['ABC'],
+      jql_filter: '',
     });
 
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+  });
+
+  it('disables project keys and saves jql_filter when a JQL filter is entered', async () => {
+    mockedApi.getSyncSchedule.mockResolvedValue({
+      cron_expression: '0 * * * *',
+      project_keys: ['ABC'],
+      jql_filter: null,
+      updated_at: '2026-09-01T00:00:00Z',
+    });
+    mockedApi.updateSyncSchedule.mockResolvedValue({
+      cron_expression: '0 * * * *',
+      project_keys: ['ABC'],
+      jql_filter: 'labels = keep',
+      updated_at: '2026-09-11T00:00:00Z',
+    });
+
+    render(<SyncScheduleForm />);
+
+    const keysInput = await screen.findByDisplayValue('ABC');
+    const jqlInput = screen.getByLabelText(/jql filter/i);
+
+    fireEvent.change(jqlInput, { target: { value: 'labels = keep' } });
+
+    expect(keysInput).toBeDisabled();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save schedule/i }));
+    });
+
+    expect(mockedApi.updateSyncSchedule).toHaveBeenCalledWith({
+      cron_expression: '0 * * * *',
+      project_keys: ['ABC'],
+      jql_filter: 'labels = keep',
+    });
   });
 
   it('shows an inline error when updateSyncSchedule is rejected', async () => {
     mockedApi.getSyncSchedule.mockResolvedValue({
       cron_expression: '0 * * * *',
       project_keys: [],
+      jql_filter: null,
       updated_at: '2026-09-01T00:00:00Z',
     });
     mockedApi.updateSyncSchedule.mockRejectedValue(

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core import db as db_module
 from app.core.db import get_db
+from app.core.jira_http import JiraClient
 from app.models import SyncRun, SyncSchedule
 from app.schemas.sync import (
     SyncRunSummary,
@@ -20,8 +21,8 @@ from app.schemas.sync import (
     SyncStatusResponse,
     SyncTriggerResponse,
 )
-from app.services.scheduler import get_or_create_schedule, get_scheduler, reschedule, validate_cron
-from app.services.sync_service import run_sync
+from app.services.scheduler import get_scheduler, reschedule, validate_cron
+from app.services.sync_service import get_or_create_schedule, run_sync
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -34,6 +35,7 @@ def _schedule_response(schedule: SyncSchedule) -> SyncScheduleResponse:
     return SyncScheduleResponse(
         cron_expression=schedule.cron_expression,
         project_keys=[key for key in schedule.project_keys.split(",") if key],
+        jql_filter=schedule.jql_filter,
         updated_at=schedule.updated_at,
     )
 
@@ -110,10 +112,21 @@ def update_schedule(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    if body.jql_filter is not None:
+        jql_filter = body.jql_filter.strip()
+        if jql_filter:
+            try:
+                with JiraClient() as client:
+                    client.validate_jql(jql_filter)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     schedule = get_or_create_schedule(db)
     schedule.cron_expression = body.cron_expression
     if body.project_keys is not None:
         schedule.project_keys = ",".join(body.project_keys)
+    if body.jql_filter is not None:
+        schedule.jql_filter = body.jql_filter.strip() or None
     schedule.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(schedule)

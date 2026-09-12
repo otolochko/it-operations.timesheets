@@ -36,6 +36,8 @@ def __init__(
 | `get_deleted_worklog_ids(since_epoch_millis: int) -> list[dict]` | `GET /rest/api/3/worklog/deleted` | Fetches deleted worklog IDs since given timestamp in milliseconds. Paginates via `nextPage`. Stores the latest `until` timestamp on `self.last_deleted_until` and returns changes. |
 | `get_worklogs_by_ids(worklog_ids: list[str]) -> list[dict]` | `POST /rest/api/3/worklog/list` | Fetches full worklog objects for up to 1,000 IDs per request. Automatically slices larger ID lists into multiple 1,000-element requests and concatenates the resulting arrays. |
 | `get_issue(issue_id: str) -> dict | None` | `GET /rest/api/3/issue/{issue_id}` | Retrieves issue summary and project key (`fields=summary,project`). Returns `None` if Jira responds with HTTP 404 (e.g. issue deleted upstream). |
+| `search_issue_ids(jql: str) -> set[str]` | `POST /rest/api/3/search/jql` | Resolves a JQL clause to the set of matching issue IDs. Paginates via `nextPageToken`, requesting only `fields: ["id"]` to minimize payload. Used to scope a sync run when `SyncSchedule.jql_filter` is set. |
+| `validate_jql(jql: str) -> None` | `POST /rest/api/3/search/jql` | Lightweight syntax check (`maxResults: 0`, `fields: []`). Raises `ValueError` with Jira's `errorMessages` on HTTP 400; does not use the retry-on-429 path since it's a one-off save-time check. |
 
 ### Retry and Throttling Policy
 

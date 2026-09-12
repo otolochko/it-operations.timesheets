@@ -15,4 +15,5 @@ class SyncSchedule(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     cron_expression: Mapped[str] = mapped_column(String)
     project_keys: Mapped[str] = mapped_column(String)
+    jql_filter: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

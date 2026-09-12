@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import Base
 from app.models import Issue, SyncRun, SyncState, Worklog
-from app.services.sync_service import run_sync
+from app.services.sync_service import get_or_create_schedule, run_sync
 
 
 class FakeJiraClient:
@@ -19,6 +19,7 @@ class FakeJiraClient:
         deleted=None,
         until=1_800_000_000_000,
         fail_issue_id=None,
+        jql_matches=None,
     ):
         self.worklogs = worklogs or []
         self.issues = issues or {}
@@ -27,17 +28,19 @@ class FakeJiraClient:
         self.last_deleted_until = until
         self.fail_issue_id = fail_issue_id
         self.issue_calls = []
+        self.jql_matches = jql_matches
+        self.jql_calls = []
 
-    def get_updated_worklog_ids(self, since):
+    def get_updated_worklog_ids(self, since, *, on_page=None):
         return [
             {"worklogId": item["id"], "updatedTime": self.until}
             for item in self.worklogs
         ], self.until
 
-    def get_deleted_worklog_ids(self, since):
+    def get_deleted_worklog_ids(self, since, *, on_page=None):
         return deepcopy(self.deleted)
 
-    def get_worklogs_by_ids(self, ids):
+    def get_worklogs_by_ids(self, ids, *, on_page=None):
         wanted = set(ids)
         return deepcopy([item for item in self.worklogs if item["id"] in wanted])
 
@@ -46,6 +49,10 @@ class FakeJiraClient:
         if issue_id == self.fail_issue_id:
             raise RuntimeError("simulated Jira issue failure")
         return deepcopy(self.issues.get(issue_id))
+
+    def search_issue_ids(self, jql, *, on_page=None):
+        self.jql_calls.append(jql)
+        return set(self.jql_matches or set())
 
 
 @pytest.fixture
@@ -85,6 +92,13 @@ def worklog(
         "started": "2026-09-11T08:30:00.000+0200",
         "updated": "2026-09-11T09:00:00.000+0000",
     }
+
+
+def test_progress_reflects_completion(db: Session) -> None:
+    result = run_sync(db, FakeJiraClient([worklog()], {"100": issue()}))
+
+    assert result.progress_phase == "Completed"
+    assert result.progress_current == result.progress_total
 
 
 def test_upsert_is_idempotent(db: Session) -> None:
@@ -189,3 +203,26 @@ def test_empty_project_scope_allows_all_projects(db: Session, monkeypatch) -> No
     run_sync(db, FakeJiraClient([out], {"200": issue("200", "OUT-1", "OUT")}))
 
     assert db.get(Worklog, "600") is not None
+
+
+def test_jql_filter_replaces_project_scope(db: Session) -> None:
+    schedule = get_or_create_schedule(db)
+    schedule.jql_filter = "labels = keep"
+    db.commit()
+
+    data = [
+        worklog("500", "100", "IN-1"),
+        worklog("600", "200", "OUT-1"),
+    ]
+    issues = {
+        "100": issue(),
+        "200": issue("200", "OUT-1", "OUT"),
+    }
+    fake = FakeJiraClient(data, issues, jql_matches={"100"})
+
+    result = run_sync(db, fake)
+
+    assert fake.jql_calls == ["labels = keep"]
+    assert {row.id for row in db.scalars(select(Worklog))} == {"500"}
+    assert result.worklogs_upserted == 1
+    assert fake.issue_calls == ["100"]

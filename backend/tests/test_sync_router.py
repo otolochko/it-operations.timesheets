@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core import db as db_module
+from app.core.jira_http import JiraClient
 from app.models import SyncRun
 from app.routers import sync as sync_router
 from app.services import scheduler as scheduler_module
@@ -107,6 +108,7 @@ def test_get_schedule_creates_default_on_fresh_db(client):
     body = response.json()
     assert body["cron_expression"] == "0 * * * *"
     assert body["project_keys"] == ["IN"]
+    assert body["jql_filter"] is None
 
 
 def test_put_schedule_with_valid_cron_persists(client):
@@ -129,6 +131,36 @@ def test_put_schedule_updates_project_keys_when_provided(client):
 
     assert response.status_code == 200
     assert response.json()["project_keys"] == ["IN", "OUT"]
+
+
+def test_put_schedule_with_jql_filter_persists(client, monkeypatch):
+    monkeypatch.setattr(JiraClient, "validate_jql", lambda self, jql: None)
+
+    response = client.put(
+        "/api/sync/schedule",
+        json={"cron_expression": "0 * * * *", "jql_filter": "labels = keep"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["jql_filter"] == "labels = keep"
+
+    follow_up = client.get("/api/sync/schedule")
+    assert follow_up.json()["jql_filter"] == "labels = keep"
+
+
+def test_put_schedule_with_invalid_jql_returns_400(client, monkeypatch):
+    def _raise(self, jql):
+        raise ValueError("The JQL is invalid")
+
+    monkeypatch.setattr(JiraClient, "validate_jql", _raise)
+
+    response = client.put(
+        "/api/sync/schedule",
+        json={"cron_expression": "0 * * * *", "jql_filter": "not valid jql"},
+    )
+
+    assert response.status_code == 400
+    assert "invalid" in response.json()["detail"].lower()
 
 
 def test_put_schedule_with_invalid_cron_returns_400(client):

@@ -7,16 +7,11 @@ all the actual sync work and transaction management.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy.orm import Session
 
 from app.core import db as db_module
-from app.core.config import settings
-from app.models import SyncSchedule
-from app.services.sync_service import run_sync
+from app.services.sync_service import get_or_create_schedule, run_sync
 
 JOB_ID = "sync_job"
 
@@ -35,21 +30,6 @@ def validate_cron(cron_expression: str) -> None:
         CronTrigger.from_crontab(cron_expression)
     except ValueError as exc:
         raise ValueError(f"Invalid cron expression {cron_expression!r}: {exc}") from exc
-
-
-def get_or_create_schedule(db: Session) -> SyncSchedule:
-    schedule = db.get(SyncSchedule, 1)
-    if schedule is None:
-        schedule = SyncSchedule(
-            id=1,
-            cron_expression=settings.sync_default_cron,
-            project_keys=",".join(settings.jira_project_keys),
-            updated_at=datetime.now(timezone.utc),
-        )
-        db.add(schedule)
-        db.commit()
-        db.refresh(schedule)
-    return schedule
 
 
 def _run_sync_job() -> None:
