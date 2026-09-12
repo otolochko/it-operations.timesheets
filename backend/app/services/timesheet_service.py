@@ -132,3 +132,47 @@ def get_issue_drilldown(
         to_date=to_date,
         issues=issues,
     )
+
+
+def get_all_issue_totals(
+    db: Session,
+    from_date: date,
+    to_date: date,
+) -> list[dict]:
+    """Per-author-per-issue totals across all authors, for the export's Issues sheet."""
+    date_filter = Worklog.work_date.between(from_date, to_date)
+
+    stmt = (
+        select(
+            Worklog.author_account_id,
+            Worklog.author_display_name,
+            Issue.key,
+            Issue.summary,
+            Issue.project_key,
+            func.sum(Worklog.time_spent_seconds).label("total_seconds"),
+            func.count(Worklog.id).label("worklog_count"),
+        )
+        .join(Issue, Issue.id == Worklog.issue_id)
+        .where(date_filter)
+        .group_by(
+            Worklog.author_account_id,
+            Worklog.author_display_name,
+            Issue.key,
+            Issue.summary,
+            Issue.project_key,
+        )
+        .order_by(Worklog.author_display_name, Issue.key)
+    )
+
+    return [
+        {
+            "author_account_id": row.author_account_id,
+            "author_display_name": row.author_display_name,
+            "issue_key": row.key,
+            "issue_summary": row.summary,
+            "project_key": row.project_key,
+            "total_seconds": int(row.total_seconds),
+            "worklog_count": int(row.worklog_count),
+        }
+        for row in db.execute(stmt)
+    ]

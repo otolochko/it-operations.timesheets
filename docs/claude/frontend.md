@@ -109,6 +109,7 @@ All backend communication passes through `frontend/src/lib/api.ts`:
 - **Cache Policy**: All requests use `cache: 'no-store'` to guarantee fresh data.
 - **Client Functions**:
   - `getTimesheetGrid(fromDate, toDate, group)`: Calls `GET /api/timesheets`.
+  - `getExportUrl(fromDate, toDate, group, format, dataset?)`: Constructs download URL for `GET /api/timesheets/export` (triggered via `window.open()`).
   - `getIssueDrilldown(author, fromDate, toDate)`: Calls `GET /api/timesheets/issues`.
   - `getSyncStatus()`: Calls `GET /api/sync/status`.
   - `triggerSync()`: Calls `POST /api/sync/worklogs`.

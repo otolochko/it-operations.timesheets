@@ -10,6 +10,7 @@ import { IssueDrilldownPanel } from '@/components/IssueDrilldownPanel';
 import {
   getTimesheetGrid,
   getIssueDrilldown,
+  getExportUrl,
   type TimesheetCell,
   type TimesheetGridResponse,
   type IssueDrilldownResponse,
@@ -119,6 +120,18 @@ export default function TimesheetsPage() {
                 </ToggleButton>
               );
             })}
+          </div>
+          <div className="flex gap-2">
+            <SecondaryButton
+              onClick={() => window.open(getExportUrl(fromDate, toDate, group, 'csv'))}
+            >
+              Export CSV
+            </SecondaryButton>
+            <SecondaryButton
+              onClick={() => window.open(getExportUrl(fromDate, toDate, group, 'xlsx'))}
+            >
+              Export Excel
+            </SecondaryButton>
           </div>
         </div>
       </PanelCard>

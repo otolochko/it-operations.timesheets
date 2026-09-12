@@ -4,12 +4,13 @@ Global backend coding conventions, response contracts, error handling, rate limi
 
 ## Response Contract
 
-All backend API routes return JSON payloads matching Pydantic response models defined in `backend/app/schemas/`.
+All backend API routes return JSON payloads matching Pydantic response models defined in `backend/app/schemas/`, except `GET /api/timesheets/export` which returns raw CSV text or binary XLSX file streams.
 
 | Endpoint | Status | Schema |
 |---|---|---|
 | `GET /api/timesheets` | 200 OK | `TimesheetGridResponse` |
 | `GET /api/timesheets/issues` | 200 OK | `IssueDrilldownResponse` |
+| `GET /api/timesheets/export` | 200 OK | File download (`text/csv`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) |
 | `POST /api/sync/worklogs` | 200 OK | `SyncTriggerResponse` |
 | `GET /api/sync/status` | 200 OK | `SyncStatusResponse` |
 | `GET /api/sync/schedule` | 200 OK | `SyncScheduleResponse` |

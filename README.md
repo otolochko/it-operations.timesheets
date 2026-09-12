@@ -22,6 +22,7 @@ Internal reporting dashboard and background synchronization engine for Jira Clou
 - **Author Matrix Grid**: View total hours logged across all team members organized in a matrix by day or ISO week, with dynamic period totals.
 - **Issue Drill-Down**: Click any cell in the grid to open a detailed breakdown of individual Jira issues, issue summaries, logged hours, and worklog counts.
 - **Summary Metrics**: Review aggregate numbers across the selected date range, including total logged hours, active author count, unique issue count, and average hours per author.
+- **CSV and Excel Export**: Download aggregated timesheet matrices, pivot-ready raw hours, or issue breakdowns as CSV files or multi-sheet Excel workbooks.
 
 ### Synchronization and Operations
 
@@ -159,6 +160,9 @@ All configuration is driven by environment variables defined in `.env`:
 - `GET /api/timesheets/issues`
   - **Parameters**: `author` (account ID string), `from` (date, YYYY-MM-DD), `to` (date, YYYY-MM-DD)
   - **Description**: Returns an issue-level breakdown of logged time and worklog counts for a specific author.
+- `GET /api/timesheets/export`
+  - **Parameters**: `from` (date, YYYY-MM-DD), `to` (date, YYYY-MM-DD), `group` (`day` or `week`), `format` (`csv` or `xlsx`), `dataset` (`matrix`, `raw`, or `issues` — CSV only)
+  - **Description**: Generates and downloads a CSV or Excel spreadsheet export of aggregated timesheet hours or issue totals for the specified date range.
 
 ### Synchronization Management
 

@@ -25,6 +25,7 @@ Operational router, universal invariants, execution commands, and environment de
 6. A sync run (`backend/app/services/sync_service.py: run_sync`) advances `sync_state.last_watermark` only on full success; a failed run leaves the watermark untouched so reruns remain safe and idempotent.
 7. `POST /api/sync/worklogs` refuses to start a second run while one is already in progress, returning the existing running `SyncRun` instead of racing on `sync_state`.
 8. Cron expressions are validated with APScheduler's own `CronTrigger.from_crontab` in `backend/app/services/scheduler.py`'s `validate_cron()`, preventing parser-mismatch crashes.
+9. Every row and header written in `backend/app/services/export_service.py` passes through `_safe_row` (or `_safe_cell`) to sanitize user-controlled strings against spreadsheet formula injection.
 
 ## Run Commands
 

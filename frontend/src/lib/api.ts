@@ -97,6 +97,18 @@ export function getTimesheetGrid(
   return request<TimesheetGridResponse>(`/api/timesheets?${params.toString()}`);
 }
 
+export function getExportUrl(
+  fromDate: string,
+  toDate: string,
+  group: 'day' | 'week',
+  format: 'csv' | 'xlsx',
+  dataset?: 'matrix' | 'raw' | 'issues',
+): string {
+  const params = new URLSearchParams({ from: fromDate, to: toDate, group, format });
+  if (dataset) params.set('dataset', dataset);
+  return `${API_BASE_URL}/api/timesheets/export?${params.toString()}`;
+}
+
 export function getIssueDrilldown(
   author: string,
   fromDate: string,

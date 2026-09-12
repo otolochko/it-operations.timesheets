@@ -8,8 +8,8 @@ User-facing features, endpoint routes, service logic, UI components, and behavio
 
 Provides an interactive matrix of Jira worklog hours aggregated by author across daily or weekly periods, summary metric tiles, and issue-level drill-down upon clicking any cell. Operates purely synchronously against PostgreSQL with zero direct Jira calls.
 
-- **Router**: `backend/app/routers/timesheets.py` — endpoints: `GET /api/timesheets` (query params: `from`, `to`, `group=day|week`), `GET /api/timesheets/issues` (query params: `author`, `from`, `to`)
-- **Service**: `backend/app/services/timesheet_service.py` — `get_timesheet_grid()` (aggregates author and period totals and computes total hours, author count, issue count, and average hours per author), `get_issue_drilldown()` (queries issue summaries, logged seconds, and worklog counts for a single author and date range)
+- **Router**: `backend/app/routers/timesheets.py` — endpoints: `GET /api/timesheets` (query params: `from`, `to`, `group=day|week`), `GET /api/timesheets/issues` (query params: `author`, `from`, `to`), `GET /api/timesheets/export` (query params: `from`, `to`, `group=day|week`, `format=csv|xlsx`, `dataset=matrix|raw|issues`)
+- **Service**: `backend/app/services/timesheet_service.py` — `get_timesheet_grid()` (aggregates author and period totals and computes total hours, author count, issue count, and average hours per author), `get_issue_drilldown()` (queries issue summaries, logged seconds, and worklog counts for a single author and date range), `get_all_issue_totals()` (queries all-authors per-issue totals across date range); `backend/app/services/export_service.py` — `build_csv()`, `build_xlsx()` (shapes aggregated timesheet and issue totals into CSV text or styled multi-sheet XLSX workbooks)
 - **Frontend**: `frontend/src/app/page.tsx` (supported by `frontend/src/components/TimesheetGrid.tsx` and `frontend/src/components/IssueDrilldownPanel.tsx`)
 - **Schemas**: `backend/app/schemas/timesheets.py` — `TimesheetCell`, `TimesheetSummary`, `TimesheetGridResponse`, `IssueWorklogEntry`, `IssueDrilldownResponse`
 - **Gotchas**:
@@ -17,6 +17,10 @@ Provides an interactive matrix of Jira worklog hours aggregated by author across
   - Week grouping uses PostgreSQL `func.date_trunc('week', Worklog.work_date)`, which follows the ISO standard (weeks start on Monday). There is no configuration option for Sunday or custom week starts.
   - When a user clicks a cell in week grouping mode, `frontend/src/app/page.tsx` expands the single `period_start` date into a 7-day range (`period_start` through `period_start + 6 days`) when querying `GET /api/timesheets/issues`.
   - Date intervals with zero logged worklogs return a 200 OK response with an empty `cells` list and zeroed summary metrics; the frontend renders a "No worklogs in this range." message rather than an error state.
+  - Exported string cells must be sanitized against spreadsheet formula injection via `_safe_cell()` / `_safe_row()` in `backend/app/services/export_service.py`. Jira issue summaries, display names, and project/issue keys are attacker-controllable; any string starting with `=`, `+`, `-`, `@`, `\t`, or `\r` is prefixed with an apostrophe (`'`). Numeric cells pass through untouched so Excel can sum them. Any newly added exported column must route its values through `_safe_cell` or `_safe_row`.
+  - The `dataset` query parameter (`matrix`, `raw`, `issues`) is only applicable to CSV exports; Excel exports (`format=xlsx`) always write all three datasets as separate workbook sheets (`Matrix`, `Raw`, `Issues`).
+  - An empty date range returns a valid header-only file with HTTP 200 rather than an error, consistent with the empty-grid behavior of `GET /api/timesheets`.
+  - CSV exports offer both `matrix` and `raw` datasets: `matrix` mirrors the on-screen author-by-period grid with row and column totals, whereas `raw` provides normalized long-format records (`Author, Account ID, Period, Hours`) suited for spreadsheet pivot tables.
 
 ---
 

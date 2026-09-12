@@ -24,12 +24,13 @@ backend/app/
 │   └── worklog.py             # Worklog entity with composite and date indexes
 ├── routers/
 │   ├── sync.py                # POST /api/sync/worklogs, GET/PUT /api/sync/schedule, GET /api/sync/status
-│   └── timesheets.py          # GET /api/timesheets, GET /api/timesheets/issues
+│   └── timesheets.py          # GET /api/timesheets, GET /api/timesheets/issues, GET /api/timesheets/export
 ├── schemas/
 │   ├── __init__.py            # Schema package marker
 │   ├── sync.py                # Pydantic request/response schemas for sync management
 │   └── timesheets.py          # Pydantic schemas for grid aggregation and issue drilldown
 ├── services/
+│   ├── export_service.py      # CSV and Excel workbook generation with formula sanitization
 │   ├── scheduler.py           # APScheduler BackgroundScheduler setup and cron validation
 │   ├── sync_service.py        # run_sync orchestrator for Jira data ingestion
 │   └── timesheet_service.py   # Pure PostgreSQL SQL aggregation for timesheets

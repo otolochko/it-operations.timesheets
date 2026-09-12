@@ -9,6 +9,7 @@ import type { TimesheetGridResponse, IssueDrilldownResponse } from '@/lib/api';
 vi.mock('@/lib/api', () => ({
   getTimesheetGrid: vi.fn(),
   getIssueDrilldown: vi.fn(),
+  getExportUrl: vi.fn(),
 }));
 
 const gridFixture: TimesheetGridResponse = {
@@ -63,8 +64,10 @@ describe('TimesheetsPage', () => {
   beforeEach(() => {
     vi.mocked(api.getTimesheetGrid).mockReset();
     vi.mocked(api.getIssueDrilldown).mockReset();
+    vi.mocked(api.getExportUrl).mockReset();
     vi.mocked(api.getTimesheetGrid).mockResolvedValue(gridFixture);
     vi.mocked(api.getIssueDrilldown).mockResolvedValue(drilldownFixture);
+    vi.mocked(api.getExportUrl).mockReturnValue('http://api.test/export');
   });
 
   it('renders the grid with correct rows, columns, and hour values', async () => {
@@ -113,6 +116,49 @@ describe('TimesheetsPage', () => {
 
     await screen.findByText('PROJ-1');
     expect(screen.getByText('Fix bug')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Export CSV', 'csv'],
+    ['Export Excel', 'xlsx'],
+  ])('%s exports the current range and grouping', async (label, expectedFormat) => {
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+
+    render(<TimesheetsPage />);
+    await screen.findByText('Alice');
+
+    fireEvent.click(screen.getByRole('button', { name: label }));
+
+    expect(api.getExportUrl).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'day',
+      expectedFormat,
+    );
+    expect(open).toHaveBeenCalledWith('http://api.test/export');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('exports with the week grouping after the toggle is switched', async () => {
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+
+    render(<TimesheetsPage />);
+    await screen.findByText('Alice');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+
+    expect(api.getExportUrl).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'week',
+      'csv',
+    );
+
+    vi.unstubAllGlobals();
   });
 
   it('shows an error message instead of crashing when the initial grid fetch fails', async () => {
