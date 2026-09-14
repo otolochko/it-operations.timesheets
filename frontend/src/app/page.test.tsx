@@ -6,6 +6,7 @@ import TimesheetsPage from './page';
 import * as api from '@/lib/api';
 import type { TimesheetGridResponse, IssueDrilldownResponse } from '@/lib/api';
 import { HoursFormatProvider } from '@/lib/HoursFormatContext';
+import { TIMESHEET_VIEW_STORAGE_KEY } from '@/lib/timesheetViewState';
 
 function renderPage() {
   return render(
@@ -71,6 +72,8 @@ const drilldownFixture: IssueDrilldownResponse = {
 
 describe('TimesheetsPage', () => {
   beforeEach(() => {
+    window.localStorage.removeItem(TIMESHEET_VIEW_STORAGE_KEY);
+    window.history.replaceState({}, '', '/');
     vi.mocked(api.getTimesheetGrid).mockReset();
     vi.mocked(api.getIssueDrilldown).mockReset();
     vi.mocked(api.getExportUrl).mockReset();
@@ -194,5 +197,60 @@ describe('TimesheetsPage', () => {
       const calls = vi.mocked(api.getTimesheetGrid).mock.calls;
       expect(calls.some((call) => call[2] === 'week')).toBe(true);
     });
+  });
+
+  it('persists filters and selected authors in storage and the URL', async () => {
+    renderPage();
+
+    await screen.findByText('Alice');
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-08-01' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-08-31' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Authors (2/2)' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bob' }));
+
+    await waitFor(() => {
+      const stored = JSON.parse(
+        window.localStorage.getItem(TIMESHEET_VIEW_STORAGE_KEY) ?? '{}',
+      );
+      expect(stored).toEqual({
+        fromDate: '2026-08-01',
+        toDate: '2026-08-31',
+        group: 'week',
+        selectedAuthorIds: ['acc-1'],
+      });
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('from')).toBe('2026-08-01');
+    expect(params.get('to')).toBe('2026-08-31');
+    expect(params.get('group')).toBe('week');
+    expect(params.get('authors')).toBe('custom');
+    expect(params.getAll('author')).toEqual(['acc-1']);
+  });
+
+  it('restores filters and selected authors after the page mounts again', async () => {
+    window.localStorage.setItem(
+      TIMESHEET_VIEW_STORAGE_KEY,
+      JSON.stringify({
+        fromDate: '2026-09-01',
+        toDate: '2026-09-30',
+        group: 'week',
+        selectedAuthorIds: ['acc-1'],
+      }),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(api.getTimesheetGrid).toHaveBeenCalledWith(
+        '2026-09-01',
+        '2026-09-30',
+        'week',
+      );
+    });
+    expect(await screen.findByRole('button', { name: 'Authors (1/2)' })).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.queryByText('Bob')).not.toBeInTheDocument();
   });
 });

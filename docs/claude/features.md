@@ -21,6 +21,7 @@ Provides an interactive matrix of Jira worklog hours aggregated by author across
   - The `dataset` query parameter (`matrix`, `raw`, `issues`) is only applicable to CSV exports; Excel exports (`format=xlsx`) always write all three datasets as separate workbook sheets (`Matrix`, `Raw`, `Issues`).
   - An empty date range returns a valid header-only file with HTTP 200 rather than an error, consistent with the empty-grid behavior of `GET /api/timesheets`.
   - CSV exports offer both `matrix` and `raw` datasets: `matrix` mirrors the on-screen author-by-period grid with row and column totals, whereas `raw` provides normalized long-format records (`Author, Account ID, Period, Hours`) suited for spreadsheet pivot tables.
+  - Dashboard date, grouping, and author filters persist through `frontend/src/lib/timesheetViewState.ts`; URL parameters override browser storage, while browser storage restores the last view after navigation through the sidebar.
 
 ---
 

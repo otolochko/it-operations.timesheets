@@ -24,6 +24,10 @@ import {
   getThisMonthRange,
   getPreviousMonthRange,
 } from '@/lib/dateRanges';
+import {
+  loadTimesheetViewState,
+  saveTimesheetViewState,
+} from '@/lib/timesheetViewState';
 
 // Default date range: the last 7 days (inclusive), ending today.
 function defaultDateRange(): { from: string; to: string } {
@@ -47,11 +51,12 @@ export default function TimesheetsPage() {
   const [fromDate, setFromDate] = React.useState(initialRange.from);
   const [toDate, setToDate] = React.useState(initialRange.to);
   const [group, setGroup] = React.useState<'day' | 'week'>('day');
+  const [viewStateReady, setViewStateReady] = React.useState(false);
 
   const [grid, setGrid] = React.useState<TimesheetGridResponse | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [selectedAuthorIds, setSelectedAuthorIds] = React.useState<Set<string>>(new Set());
+  const [authorSelection, setAuthorSelection] = React.useState<Set<string> | null>(null);
 
   const [drilldown, setDrilldown] = React.useState<IssueDrilldownResponse | null>(null);
   const [drilldownLoading, setDrilldownLoading] = React.useState(false);
@@ -59,15 +64,44 @@ export default function TimesheetsPage() {
   const [drilldownOpen, setDrilldownOpen] = React.useState(false);
 
   React.useEffect(() => {
+    const restoredState = loadTimesheetViewState({
+      fromDate: initialRange.from,
+      toDate: initialRange.to,
+      group: 'day',
+      selectedAuthorIds: null,
+    });
+    setFromDate(restoredState.fromDate);
+    setToDate(restoredState.toDate);
+    setGroup(restoredState.group);
+    setAuthorSelection(
+      restoredState.selectedAuthorIds === null
+        ? null
+        : new Set(restoredState.selectedAuthorIds),
+    );
+    setViewStateReady(true);
+  }, [initialRange.from, initialRange.to]);
+
+  React.useEffect(() => {
+    if (!viewStateReady) return;
+
+    saveTimesheetViewState({
+      fromDate,
+      toDate,
+      group,
+      selectedAuthorIds:
+        authorSelection === null ? null : Array.from(authorSelection).sort(),
+    });
+  }, [authorSelection, fromDate, group, toDate, viewStateReady]);
+
+  React.useEffect(() => {
+    if (!viewStateReady) return;
+
     let cancelled = false;
     setLoading(true);
     setError(null);
     getTimesheetGrid(fromDate, toDate, group)
       .then((response) => {
-        if (!cancelled) {
-          setGrid(response);
-          setSelectedAuthorIds(new Set(response.cells.map((cell) => cell.author_account_id)));
-        }
+        if (!cancelled) setGrid(response);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -80,7 +114,7 @@ export default function TimesheetsPage() {
     return () => {
       cancelled = true;
     };
-  }, [fromDate, toDate, group]);
+  }, [fromDate, toDate, group, viewStateReady]);
 
   function handleCellClick(cell: TimesheetCell) {
     const cellFrom = cell.period_start;
@@ -110,6 +144,19 @@ export default function TimesheetsPage() {
       ([accountId, displayName]) => ({ accountId, displayName }),
     ).sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [grid]);
+
+  const selectedAuthorIds = React.useMemo(() => {
+    const availableAuthorIds = authorOptions.map((author) => author.accountId);
+    if (authorSelection === null) return new Set(availableAuthorIds);
+    return new Set(availableAuthorIds.filter((accountId) => authorSelection.has(accountId)));
+  }, [authorOptions, authorSelection]);
+
+  function handleAuthorSelectionChange(nextSelection: Set<string>) {
+    const allAuthorsSelected =
+      authorOptions.length > 0 &&
+      authorOptions.every((author) => nextSelection.has(author.accountId));
+    setAuthorSelection(allAuthorsSelected ? null : nextSelection);
+  }
 
   const filteredCells =
     grid?.cells.filter((cell) => selectedAuthorIds.has(cell.author_account_id)) ?? [];
@@ -146,7 +193,7 @@ export default function TimesheetsPage() {
           <AuthorFilter
             authors={authorOptions}
             selected={selectedAuthorIds}
-            onChange={setSelectedAuthorIds}
+            onChange={handleAuthorSelectionChange}
           />
           <div className="flex gap-2">
             {[

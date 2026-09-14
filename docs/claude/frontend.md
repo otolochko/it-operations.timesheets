@@ -38,6 +38,7 @@ frontend/src/
     ├── format.ts                  # Decimal and duration hours formatting helpers
     ├── HoursFormatContext.tsx     # Browser-local hours display preference
     ├── ThemeContext.tsx           # Theme state and DOM attribute synchronization
+    ├── timesheetViewState.ts      # Persisted dashboard filters and URL synchronization
     └── theme/
         ├── constants.ts           # Shared local-storage key for pre-render theme setup
         └── tokens.ts              # JavaScript export of theme token CSS variables
@@ -118,6 +119,14 @@ const links = [
 
 The active route is identified using Next.js `usePathname()` to apply a filled active state. The
 sidebar is sticky and spans the viewport; it collapses to an icon rail below the `md` breakpoint.
+
+## Dashboard State Persistence
+
+`frontend/src/lib/timesheetViewState.ts` persists the date range, day/week grouping, and author
+selection in `localStorage`. The same state is mirrored to the `from`, `to`, `group`, `authors`,
+and repeated `author` URL parameters. URL values take precedence over browser storage so a copied
+dashboard URL reproduces the same view; browser storage restores the view after navigating away
+through a sidebar link that does not carry those parameters.
 
 ## API Client Integration
 
