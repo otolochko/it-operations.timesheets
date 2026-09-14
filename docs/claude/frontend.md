@@ -57,6 +57,9 @@ Tokens are declared on `:root` and overridden under `:root[data-theme='dark']`. 
 | `--accent` | `#2563eb` | `#3b82f6` | `bg-accent`, `text-accent`, `border-accent` |
 | `--accent-hover` | `#1d4ed8` | `#60a5fa` | `hover:bg-accent-hover` |
 | `--success` | `#16a34a` | `#22c55e` | `text-success`, `bg-success` |
+| `--success-surface` | `#15803d` | `#22c55e` | `bg-success-surface` |
+| `--success-surface-hover` | `#166534` | `#4ade80` | `hover:bg-success-surface-hover` |
+| `--success-contrast` | `#ffffff` | `#052e16` | `text-success-contrast` |
 | `--danger` | `#dc2626` | `#f87171` | `text-danger`, `bg-danger` |
 | `--warning` | `#d97706` | `#fbbf24` | `text-warning`, `bg-warning` |
 | `--bg` | `#f8fafc` | `#0b1220` | `bg-bg` |
@@ -94,7 +97,7 @@ The log viewer requires a fixed, always-dark terminal appearance. These tokens a
 
 | Component | Path | Responsibility |
 |---|---|---|
-| `PrimaryButton`, `SecondaryButton`, `DangerButton` | `frontend/src/components/Buttons.tsx` | Standardized button variants with loading/disabled styling. |
+| `PrimaryButton`, `SecondaryButton`, `SuccessButton`, `DangerButton` | `frontend/src/components/Buttons.tsx` | Standardized button variants with loading/disabled styling. |
 | `FormField` | `frontend/src/components/FormField.tsx` | Form input wrapper providing label, hint text, and error text. |
 | `PanelCard` | `frontend/src/components/PanelCard.tsx` | White/dark card container with optional header title. |
 | `StatusBadge` | `frontend/src/components/StatusBadge.tsx` | Pill status badge styled by `'info'`, `'success'`, or `'danger'`. |

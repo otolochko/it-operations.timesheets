@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { FormField } from '@/components/FormField';
 import { PanelCard } from '@/components/PanelCard';
-import { PrimaryButton, SecondaryButton } from '@/components/Buttons';
+import { PrimaryButton, SecondaryButton, SuccessButton } from '@/components/Buttons';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TimesheetGrid } from '@/components/TimesheetGrid';
 import { IssueDrilldownPanel } from '@/components/IssueDrilldownPanel';
@@ -224,12 +224,26 @@ export default function TimesheetsPage() {
               );
             })}
           </div>
-          <div className="flex gap-2">
-            <SecondaryButton
+          <div className="ml-auto flex shrink-0">
+            <SuccessButton
               onClick={() => window.open(getExportUrl(fromDate, toDate, group, 'xlsx'))}
             >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                fill="none"
+                className="h-4 w-4"
+              >
+                <path
+                  d="M10 2.5v9m0 0 3.5-3.5M10 11.5 6.5 8M3 13.5v2A1.5 1.5 0 0 0 4.5 17h11a1.5 1.5 0 0 0 1.5-1.5v-2"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
               Export Excel
-            </SecondaryButton>
+            </SuccessButton>
           </div>
         </div>
       </PanelCard>
