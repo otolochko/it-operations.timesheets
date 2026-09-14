@@ -20,15 +20,17 @@ Internal reporting dashboard and background synchronization engine for Jira Clou
 ### Timesheet Reporting
 
 - **Author Matrix Grid**: View total hours logged across all team members organized in a matrix by day or ISO week, with dynamic period totals.
+- **Author Search and Filter**: Filter the grid dynamically to specific team members with real-time total recalculation and selection presets.
 - **Issue Drill-Down**: Click any cell in the grid to open a detailed breakdown of individual Jira issues, issue summaries, logged hours, and worklog counts.
 - **Summary Metrics**: Review aggregate numbers across the selected date range, including total logged hours, active author count, unique issue count, and average hours per author.
 - **CSV and Excel Export**: Download aggregated timesheet matrices, pivot-ready raw hours, or issue breakdowns as CSV files or multi-sheet Excel workbooks.
+- **Flexible Display Options**: Toggle between decimal and duration hours formats, jump between quick date ranges, and switch between light and dark themes.
 
 ### Synchronization and Operations
 
 - **Automated Background Ingestion**: Synchronize worklog entries from Jira Cloud on a scheduled cron cadence without impacting interface responsiveness.
-- **Manual Sync Execution**: Trigger synchronization on demand with live run status tracking and poller updates.
-- **Dynamic Schedule Administration**: Adjust cron expressions and target project key filters directly from the management interface without restarting services.
+- **Manual Sync Execution and Cancellation**: Trigger synchronization on demand or request cooperative cancellation of an active run, with live phase progress and streaming execution logs.
+- **Dynamic Schedule Administration**: Adjust cron expressions, project key filters, and custom JQL scope filters directly from the management interface with instant validation and rescheduling.
 
 ---
 
@@ -168,13 +170,15 @@ All configuration is driven by environment variables defined in `.env`:
 
 - `POST /api/sync/worklogs`
   - **Description**: Triggers an on-demand synchronization run on a background thread. Returns the run ID and status.
+- `POST /api/sync/worklogs/cancel`
+  - **Description**: Requests cooperative cancellation of the running sync job. Returns the run ID and status.
 - `GET /api/sync/status`
-  - **Description**: Returns metadata for the most recent sync execution and whether a sync is currently in progress.
+  - **Description**: Returns metadata for the most recent sync execution (including phase progress and logs) and whether a sync is currently in progress.
 - `GET /api/sync/schedule`
-  - **Description**: Returns the active cron expression, project key filters, and last modification timestamp.
+  - **Description**: Returns the active cron expression, project key filters, JQL filter, and last modification timestamp.
 - `PUT /api/sync/schedule`
-  - **Payload**: `{"cron_expression": "0 * * * *", "project_keys": ["PROJ1", "PROJ2"]}`
-  - **Description**: Updates the cron schedule and project filters, rescheduling the background worker immediately.
+  - **Payload**: `{"cron_expression": "0 * * * *", "project_keys": ["PROJ1", "PROJ2"], "jql_filter": "project = PROJ1"}`
+  - **Description**: Updates the cron schedule, project filters, and optional JQL filter, validating JQL against Jira and rescheduling the background worker immediately.
 
 ---
 

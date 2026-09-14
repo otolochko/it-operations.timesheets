@@ -19,11 +19,11 @@ backend/app/
 │   ├── __init__.py            # Exported SQLAlchemy declarative models
 │   ├── issue.py               # Issue entity (id, key, project_key, summary, updated_at)
 │   ├── sync_run.py            # SyncRun execution history for status inspection
-│   ├── sync_schedule.py       # SyncSchedule singleton (id=1, cron_expression, project_keys)
+│   ├── sync_schedule.py       # SyncSchedule singleton (id=1, cron_expression, project_keys, jql_filter)
 │   ├── sync_state.py          # SyncState singleton (id=1, last_watermark timestamp cursor)
 │   └── worklog.py             # Worklog entity with composite and date indexes
 ├── routers/
-│   ├── sync.py                # POST /api/sync/worklogs, GET/PUT /api/sync/schedule, GET /api/sync/status
+│   ├── sync.py                # POST /api/sync/worklogs, POST /api/sync/worklogs/cancel, GET/PUT /api/sync/schedule, GET /api/sync/status
 │   └── timesheets.py          # GET /api/timesheets, GET /api/timesheets/issues, GET /api/timesheets/export
 ├── schemas/
 │   ├── __init__.py            # Schema package marker
@@ -109,7 +109,7 @@ PostgreSQL persistence is managed via SQLAlchemy 2.0 declarative models:
 | `issues` | `backend/app/models/issue.py` | Stores synced Jira issue summaries and project keys | Primary key: `id` (Jira issue ID string). Unique index: `key`. Index: `project_key`. |
 | `worklogs` | `backend/app/models/worklog.py` | Synced worklog entries with hours and dates | Primary key: `id`. Foreign key: `issue_id` -> `issues.id`. Indexes: `ix_worklogs_work_date`, `ix_worklogs_author_account_id_work_date`, `ix_worklogs_issue_id`. |
 | `sync_state` | `backend/app/models/sync_state.py` | Watermark cursor for incremental sync | Singleton constraint: `id = 1` (`ck_sync_state_single_row`). Column: `last_watermark` (nullable tz-aware datetime). |
-| `sync_schedule` | `backend/app/models/sync_schedule.py` | Active cron schedule and project key filters | Singleton constraint: `id = 1` (`ck_sync_schedule_single_row`). Columns: `cron_expression`, `project_keys` (CSV string), `updated_at`. |
-| `sync_run` | `backend/app/models/sync_run.py` | Historical audit log for sync executions | Primary key: `id` (autoincrement). Columns: `started_at`, `finished_at`, `status`, `worklogs_upserted`, `worklogs_deleted`, `error`, `log_text`. |
+| `sync_schedule` | `backend/app/models/sync_schedule.py` | Active cron schedule, project key filters, and JQL filter | Singleton constraint: `id = 1` (`ck_sync_schedule_single_row`). Columns: `cron_expression`, `project_keys` (CSV string), `jql_filter` (nullable string), `updated_at`. |
+| `sync_runs` | `backend/app/models/sync_run.py` | Historical audit log for sync executions | Primary key: `id` (autoincrement). Columns: `started_at`, `finished_at`, `status`, `worklogs_upserted`, `worklogs_deleted`, `error`, `log_text`, `cancel_requested`, `progress_phase`, `progress_current`, `progress_total`. |
 
 For operational details on how state transitions occur during synchronization, see [`async-tasks.md`](async-tasks.md). For feature endpoints consuming these models, see [`features.md`](features.md).

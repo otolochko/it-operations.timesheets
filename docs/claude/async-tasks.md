@@ -19,9 +19,10 @@ run_sync(db) ──► Record SyncRun("running")
    ├──► Upsert issues and worklogs in PostgreSQL
    │
    ▼
-Success?
-   ├─► YES: Update sync_state.last_watermark, commit, mark SyncRun("success")
-   └─► NO:  Rollback DB changes, leave watermark untouched, mark SyncRun("failed")
+Outcome?
+   ├─► SUCCESS:   Update sync_state.last_watermark, commit, mark SyncRun("success")
+   ├─► CANCELLED: Rollback uncommitted DB changes, leave watermark untouched, mark SyncRun("cancelled")
+   └─► FAILED:    Rollback DB changes, leave watermark untouched, mark SyncRun("failed")
 ```
 
 ## Execution Modes
@@ -30,6 +31,7 @@ Success?
 |---|---|---|
 | Scheduled | APScheduler `BackgroundScheduler` (`JOB_ID = "sync_job"`) | Executes `_run_sync_job()` on an APScheduler worker thread. Opens and closes a dedicated `SessionLocal()` session. |
 | Manual | `POST /api/sync/worklogs` | Spawns a daemon thread via `threading.Thread(target=_run_sync_in_background, daemon=True)`. Handler polls for up to 2000ms until the new `SyncRun` row is committed, returning its ID immediately. |
+| Cancellation | `POST /api/sync/worklogs/cancel` | Sets `cancel_requested = True` on the running `SyncRun` row. The worker detects the flag cooperatively at its next checkpoint. |
 
 ## Concurrency Guard
 
@@ -46,13 +48,25 @@ Execution history is recorded in `sync_runs` (`backend/app/models/sync_run.py`):
 - `id`: Integer primary key (autoincrement).
 - `started_at`: UTC timestamp when execution began.
 - `finished_at`: UTC timestamp when execution finished (null while running).
-- `status`: Execution state (`"running"`, `"success"`, or `"failed"`).
+- `status`: Execution state (`"running"`, `"success"`, `"failed"`, or `"cancelled"`).
 - `worklogs_upserted`: Number of worklogs inserted or updated in PostgreSQL.
 - `worklogs_deleted`: Number of worklogs deleted matching Jira change events.
 - `error`: Exception message if status is `"failed"`.
-- `log_text`: Sequential execution log text updated as sync progresses.
+- `log_text`: Sequential execution log text updated and committed incrementally as sync progresses.
+- `cancel_requested`: Boolean flag set by `POST /api/sync/worklogs/cancel` to request cooperative cancellation.
+- `progress_phase`: Current sync phase (nullable string, e.g. `"fetching_changes"`, `"fetching_worklogs"`, `"fetching_issues"`, `"processing_worklogs"`).
+- `progress_current`: Current count of processed units in the active phase.
+- `progress_total`: Total count of units in the active phase (null if indeterminate).
 
 The initial `"running"` status is committed immediately so that status polling endpoints (`GET /api/sync/status`) can observe running tasks.
+
+## Cooperative Cancellation
+
+Sync cancellation operates cooperatively:
+
+1. `POST /api/sync/worklogs/cancel` marks `SyncRun.cancel_requested = True` on the active run.
+2. The sync worker (`run_sync`) checks this flag at each phase boundary and after each page batch via its `_progress()` helper.
+3. When cancellation is detected, `run_sync` raises `SyncCancelled`, rolls back uncommitted changes, marks the run as `"cancelled"`, leaves `sync_state.last_watermark` untouched, and commits the terminal state.
 
 ## Watermark State Machine (`sync_state` Table)
 
@@ -62,7 +76,7 @@ Incremental sync tracking relies on the `sync_state` singleton table (`backend/a
 2. **Incremental Sync**: Subsequent runs query changes where timestamp is greater than `_epoch_millis(state.last_watermark)`.
 3. **Cursor Advancement**: `state.last_watermark` is updated to the maximum `until` timestamp returned by Jira's change pages.
 4. **Atomicity**: The watermark advances **only** when all issue and worklog upserts commit successfully.
-5. **Rollback Behavior**: If any exception occurs during synchronization, `db.rollback()` reverts all worklog modifications. The watermark remains at its previous value, ensuring future runs re-ingest the uncommitted interval.
+5. **Rollback Behavior**: If any exception or cancellation occurs during synchronization, `db.rollback()` reverts all worklog modifications. The watermark remains at its previous value, ensuring future runs re-ingest the uncommitted interval.
 
 ## Dynamic Scheduling (`sync_schedule` Table)
 
@@ -70,7 +84,8 @@ Scheduler parameters are persisted in the `sync_schedule` singleton table (`back
 
 - **Cron Expression**: 5-field cron string defining the sync schedule.
 - **Project Filter**: Comma-separated list of Jira project keys to ingest.
-- **Validation**: `validate_cron()` in `backend/app/services/scheduler.py` validates input using `CronTrigger.from_crontab()`.
+- **JQL Filter**: Optional custom JQL query string (`jql_filter`). When set, Jira issue IDs are resolved via `JiraClient.search_issue_ids` and override the project-key filter.
+- **Validation**: `validate_cron()` in `backend/app/services/scheduler.py` validates cron input using `CronTrigger.from_crontab()`. JQL expressions are validated against Jira via `JiraClient.validate_jql()` before persisting.
 - **Runtime Updates**: When `PUT /api/sync/schedule` is called, changes are saved to PostgreSQL and `reschedule(scheduler, cron_expression)` reconfigures the running `BackgroundScheduler` in memory without restarting the process.
 
 ## Client Polling Contract

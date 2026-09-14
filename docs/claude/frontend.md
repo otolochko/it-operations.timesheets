@@ -16,7 +16,9 @@ frontend/src/
 │   └── sync/
 │       └── page.tsx               # Sync, schedule, and display settings page
 ├── components/
-│   ├── Buttons.tsx                # PrimaryButton, SecondaryButton, DangerButton
+│   ├── AuthorFilter.tsx           # Searchable multi-select dropdown for filtering authors
+│   ├── AuthorFilter.test.tsx      # Unit tests for author filter dropdown
+│   ├── Buttons.tsx                # PrimaryButton, SecondaryButton, SuccessButton, DangerButton
 │   ├── DashboardCharts.tsx        # Stacked time trend and author ranking charts
 │   ├── DashboardCharts.test.tsx   # Unit tests for chart aggregation and author grouping
 │   ├── DisplaySettingsPanel.tsx    # Browser-local hours display format controls
@@ -33,7 +35,8 @@ frontend/src/
 │   ├── SyncStatusPanel.test.tsx   # Unit tests for sync status panel
 │   ├── ThemeToggle.tsx            # Persisted light/dark theme switch in the sidebar
 │   ├── ThemeToggle.test.tsx       # Unit tests for theme switching and persistence
-│   └── TimesheetGrid.tsx          # Author x period hours table with interactive drilldown cells
+│   ├── TimesheetGrid.tsx          # Author x period hours table with interactive drilldown cells
+│   └── TimesheetGrid.test.tsx     # Unit tests for timesheet grid row/column totals
 └── lib/
     ├── api.ts                     # Typed fetch client for backend REST API endpoints
     ├── dateRanges.ts              # Calendar week and month range helpers
@@ -101,6 +104,7 @@ The log viewer requires a fixed, always-dark terminal appearance. These tokens a
 
 | Component | Path | Responsibility |
 |---|---|---|
+| `AuthorFilter` | `frontend/src/components/AuthorFilter.tsx` | Searchable multi-select dropdown for filtering authors with select-all and clear actions. |
 | `PrimaryButton`, `SecondaryButton`, `SuccessButton`, `DangerButton` | `frontend/src/components/Buttons.tsx` | Standardized button variants with loading/disabled styling. |
 | `DashboardCharts` | `frontend/src/components/DashboardCharts.tsx` | Responsive stacked period chart and top-author ranking derived from filtered grid cells. |
 | `FormField` | `frontend/src/components/FormField.tsx` | Form input wrapper providing label, hint text, and error text. |
@@ -148,6 +152,7 @@ All backend communication passes through `frontend/src/lib/api.ts`:
   - `getIssueDrilldown(author, fromDate, toDate)`: Calls `GET /api/timesheets/issues`.
   - `getSyncStatus()`: Calls `GET /api/sync/status`.
   - `triggerSync()`: Calls `POST /api/sync/worklogs`.
+  - `cancelSync()`: Calls `POST /api/sync/worklogs/cancel`.
   - `getSyncSchedule()`: Calls `GET /api/sync/schedule`.
   - `updateSyncSchedule(body)`: Calls `PUT /api/sync/schedule`.
 

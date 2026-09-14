@@ -12,6 +12,7 @@ All backend API routes return JSON payloads matching Pydantic response models de
 | `GET /api/timesheets/issues` | 200 OK | `IssueDrilldownResponse` |
 | `GET /api/timesheets/export` | 200 OK | File download (`text/csv`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) |
 | `POST /api/sync/worklogs` | 200 OK | `SyncTriggerResponse` |
+| `POST /api/sync/worklogs/cancel` | 200 OK | `SyncTriggerResponse` |
 | `GET /api/sync/status` | 200 OK | `SyncStatusResponse` |
 | `GET /api/sync/schedule` | 200 OK | `SyncScheduleResponse` |
 | `PUT /api/sync/schedule` | 200 OK | `SyncScheduleResponse` |
@@ -64,6 +65,7 @@ Outbound Jira Cloud HTTP requests are managed by `JiraClient` in `backend/app/co
   retry_after = self._retry_after_seconds(response)
   self._sleep(max(backoff, retry_after or 0.0))
   ```
+- **Transport Error Retries**: `_request` also catches `httpx.TransportError` (covering timeouts and connection-level failures) and retries up to `settings.jira_max_retries` with the same exponential backoff before re-raising.
 - **Terminal Failures**: Non-429 client and server errors raise `httpx.HTTPStatusError` immediately (unless `allow_404=True` is explicitly passed).
 
 ## Pagination Patterns

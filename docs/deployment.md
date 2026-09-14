@@ -58,6 +58,7 @@ cp .env.example .env
 | `JIRA_API_TOKEN` | Atlassian API token generated for the service account |
 | `JIRA_MAX_RETRIES` | `5` |
 | `JIRA_RETRY_BASE_SECONDS` | `1.0` |
+| `JIRA_TIMEOUT_SECONDS` | `30.0` |
 | `JIRA_PROJECT_KEYS` | Comma-separated list of target project keys (e.g. `INFRA,OPS,PLAT`) |
 | `SYNC_DEFAULT_CRON` | Cron schedule for background sync (e.g. `0 * * * *` for hourly) |
 | `CORS_ALLOWED_ORIGINS` | Internal domain (e.g. `https://timesheets.internal.corp`) |
