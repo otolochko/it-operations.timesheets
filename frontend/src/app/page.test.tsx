@@ -5,6 +5,15 @@ import '@testing-library/jest-dom/vitest';
 import TimesheetsPage from './page';
 import * as api from '@/lib/api';
 import type { TimesheetGridResponse, IssueDrilldownResponse } from '@/lib/api';
+import { HoursFormatProvider } from '@/lib/HoursFormatContext';
+
+function renderPage() {
+  return render(
+    <HoursFormatProvider>
+      <TimesheetsPage />
+    </HoursFormatProvider>,
+  );
+}
 
 vi.mock('@/lib/api', () => ({
   getTimesheetGrid: vi.fn(),
@@ -71,7 +80,7 @@ describe('TimesheetsPage', () => {
   });
 
   it('renders the grid with correct rows, columns, and hour values', async () => {
-    render(<TimesheetsPage />);
+    renderPage();
 
     await screen.findByText('Alice');
     expect(screen.getByText('Bob')).toBeInTheDocument();
@@ -88,7 +97,7 @@ describe('TimesheetsPage', () => {
       cells: [],
     });
 
-    render(<TimesheetsPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByText('No worklogs in this range.')).toBeInTheDocument();
@@ -96,7 +105,7 @@ describe('TimesheetsPage', () => {
   });
 
   it('renders summary metrics from the fixture response', async () => {
-    render(<TimesheetsPage />);
+    renderPage();
 
     await screen.findByText('3.5');
     expect(screen.getByText('2')).toBeInTheDocument();
@@ -105,7 +114,7 @@ describe('TimesheetsPage', () => {
   });
 
   it('opens the drill-down panel with correct data when a cell is clicked', async () => {
-    render(<TimesheetsPage />);
+    renderPage();
 
     const aliceCell = await screen.findByText('1.0');
     fireEvent.click(aliceCell);
@@ -125,7 +134,7 @@ describe('TimesheetsPage', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
 
-    render(<TimesheetsPage />);
+    renderPage();
     await screen.findByText('Alice');
 
     fireEvent.click(screen.getByRole('button', { name: label }));
@@ -145,7 +154,7 @@ describe('TimesheetsPage', () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
 
-    render(<TimesheetsPage />);
+    renderPage();
     await screen.findByText('Alice');
 
     fireEvent.click(screen.getByRole('button', { name: 'Week' }));
@@ -165,14 +174,14 @@ describe('TimesheetsPage', () => {
     vi.mocked(api.getTimesheetGrid).mockReset();
     vi.mocked(api.getTimesheetGrid).mockRejectedValue(new Error('Network down'));
 
-    render(<TimesheetsPage />);
+    renderPage();
 
     await screen.findByText('Network down');
     expect(screen.getByText('Error')).toBeInTheDocument();
   });
 
   it('calls getTimesheetGrid with the updated group when the day/week toggle is switched', async () => {
-    render(<TimesheetsPage />);
+    renderPage();
 
     await waitFor(() => {
       expect(api.getTimesheetGrid).toHaveBeenCalled();

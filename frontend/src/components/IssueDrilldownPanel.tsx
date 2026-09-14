@@ -3,7 +3,8 @@ import { PanelCard } from './PanelCard';
 import { SecondaryButton } from './Buttons';
 import { StatusBadge } from './StatusBadge';
 import type { IssueDrilldownResponse } from '@/lib/api';
-import { formatHours } from '@/lib/format';
+import { formatSecondsWithMode } from '@/lib/format';
+import { useHoursFormat } from '@/lib/HoursFormatContext';
 
 export interface IssueDrilldownPanelProps {
   data: IssueDrilldownResponse | null;
@@ -18,6 +19,8 @@ export function IssueDrilldownPanel({
   error,
   onClose,
 }: IssueDrilldownPanelProps) {
+  const { format } = useHoursFormat();
+
   return (
     <PanelCard title="Issue drill-down">
       <div className="flex flex-col gap-3">
@@ -64,7 +67,7 @@ export function IssueDrilldownPanel({
                         {issue.issue_summary}
                       </td>
                       <td className="border-b border-border px-2 py-1 text-text-primary">
-                        {formatHours(issue.total_seconds)}
+                        {formatSecondsWithMode(issue.total_seconds, format)}
                       </td>
                       <td className="border-b border-border px-2 py-1 text-text-primary">
                         {issue.worklog_count}

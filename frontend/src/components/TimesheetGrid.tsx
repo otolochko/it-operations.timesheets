@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { PanelCard } from './PanelCard';
 import type { TimesheetCell } from '@/lib/api';
-import { formatHours } from '@/lib/format';
+import { formatSecondsWithMode } from '@/lib/format';
+import { useHoursFormat } from '@/lib/HoursFormatContext';
 
 export interface TimesheetGridProps {
   cells: TimesheetCell[];
@@ -9,6 +10,8 @@ export interface TimesheetGridProps {
 }
 
 export function TimesheetGrid({ cells, onCellClick }: TimesheetGridProps) {
+  const { format } = useHoursFormat();
+
   if (cells.length === 0) {
     return (
       <PanelCard>
@@ -65,7 +68,7 @@ export function TimesheetGrid({ cells, onCellClick }: TimesheetGridProps) {
                           onClick={() => onCellClick(cell)}
                           className="text-accent hover:underline"
                         >
-                          {formatHours(cell.total_seconds)}
+                          {formatSecondsWithMode(cell.total_seconds, format)}
                         </button>
                       ) : (
                         <span className="text-text-muted">-</span>

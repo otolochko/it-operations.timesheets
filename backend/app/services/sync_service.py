@@ -226,14 +226,11 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         # synced in a prior run doesn't need refetching -- only ask Jira
         # about ones we've never seen, batched via `id in (...)` search
         # instead of one GET per issue.
-        issue_rows: dict[str, Issue] = (
-            {
-                issue.id: issue
-                for issue in db.scalars(select(Issue).where(Issue.id.in_(candidate_issue_ids)))
-            }
-            if candidate_issue_ids
-            else {}
-        )
+        issue_rows: dict[str, Issue] = {}
+        for start in range(0, len(candidate_issue_ids), 10000):
+            chunk = candidate_issue_ids[start : start + 10000]
+            for issue in db.scalars(select(Issue).where(Issue.id.in_(chunk))):
+                issue_rows[issue.id] = issue
         missing_issue_ids = [i for i in candidate_issue_ids if i not in issue_rows]
 
         issue_payloads: dict[str, dict] = {}
@@ -289,14 +286,12 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         worklog_ids = {str(worklog_json["id"]) for worklog_json, _ in in_scope}
         deleted_ids = {_change_id(change) for change in deleted_changes}
         all_worklog_ids = worklog_ids | deleted_ids
-        worklog_rows: dict[str, Worklog] = (
-            {
-                worklog.id: worklog
-                for worklog in db.scalars(select(Worklog).where(Worklog.id.in_(all_worklog_ids)))
-            }
-            if all_worklog_ids
-            else {}
-        )
+        all_worklog_ids_list = list(all_worklog_ids)
+        worklog_rows: dict[str, Worklog] = {}
+        for start in range(0, len(all_worklog_ids_list), 10000):
+            chunk = all_worklog_ids_list[start : start + 10000]
+            for worklog in db.scalars(select(Worklog).where(Worklog.id.in_(chunk))):
+                worklog_rows[worklog.id] = worklog
 
         for worklog_json, issue_json in in_scope:
             issue_id = str(worklog_json["issueId"])

@@ -15,6 +15,14 @@ import {
   type TimesheetGridResponse,
   type IssueDrilldownResponse,
 } from '@/lib/api';
+import { formatSecondsWithMode } from '@/lib/format';
+import { useHoursFormat } from '@/lib/HoursFormatContext';
+import {
+  getThisWeekRange,
+  getPreviousWeekRange,
+  getThisMonthRange,
+  getPreviousMonthRange,
+} from '@/lib/dateRanges';
 
 // Default date range: the last 7 days (inclusive), ending today.
 function defaultDateRange(): { from: string; to: string } {
@@ -33,6 +41,7 @@ function addDaysIso(dateIso: string, days: number): string {
 }
 
 export default function TimesheetsPage() {
+  const { format } = useHoursFormat();
   const initialRange = React.useMemo(defaultDateRange, []);
   const [fromDate, setFromDate] = React.useState(initialRange.from);
   const [toDate, setToDate] = React.useState(initialRange.to);
@@ -112,6 +121,25 @@ export default function TimesheetsPage() {
             />
           </FormField>
           <div className="flex gap-2">
+            {[
+              { label: 'This week', range: getThisWeekRange },
+              { label: 'Previous week', range: getPreviousWeekRange },
+              { label: 'This month', range: getThisMonthRange },
+              { label: 'Previous month', range: getPreviousMonthRange },
+            ].map(({ label, range }) => (
+              <SecondaryButton
+                key={label}
+                onClick={() => {
+                  const { from, to } = range();
+                  setFromDate(from);
+                  setToDate(to);
+                }}
+              >
+                {label}
+              </SecondaryButton>
+            ))}
+          </div>
+          <div className="flex gap-2">
             {(['day', 'week'] as const).map((option) => {
               const ToggleButton = group === option ? PrimaryButton : SecondaryButton;
               return (
@@ -149,7 +177,7 @@ export default function TimesheetsPage() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <PanelCard title="Total hours">
                 <p className="text-2xl font-semibold text-text-primary">
-                  {summary.total_hours.toFixed(1)}
+                  {formatSecondsWithMode(summary.total_hours * 3600, format)}
                 </p>
               </PanelCard>
               <PanelCard title="Authors">
@@ -164,7 +192,7 @@ export default function TimesheetsPage() {
               </PanelCard>
               <PanelCard title="Avg hours / author">
                 <p className="text-2xl font-semibold text-text-primary">
-                  {summary.average_hours_per_author.toFixed(1)}
+                  {formatSecondsWithMode(summary.average_hours_per_author * 3600, format)}
                 </p>
               </PanelCard>
             </div>

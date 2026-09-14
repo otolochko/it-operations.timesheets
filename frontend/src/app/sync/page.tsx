@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { SyncStatusPanel } from '@/components/SyncStatusPanel';
 import { SyncScheduleForm } from '@/components/SyncScheduleForm';
+import { DisplaySettingsPanel } from '@/components/DisplaySettingsPanel';
 
 export default function SyncSettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function SyncSettingsPage() {
       <h1 className="text-lg font-semibold text-text-primary">Sync settings</h1>
       <SyncStatusPanel />
       <SyncScheduleForm />
+      <DisplaySettingsPanel />
     </div>
   );
 }
