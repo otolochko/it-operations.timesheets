@@ -11,7 +11,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core import db as db_module
-from app.services.sync_service import get_or_create_schedule, run_sync
+from app.services.sync_service import get_or_create_schedule, is_sync_running, run_sync
 
 JOB_ID = "sync_job"
 
@@ -33,8 +33,14 @@ def validate_cron(cron_expression: str) -> None:
 
 
 def _run_sync_job() -> None:
+    """Cron-triggered sync. Skips if a run (manual or a prior cron fire) is
+    already in progress -- run_sync reads/advances the single-row
+    `sync_state` watermark, so two concurrent runs would race on it.
+    """
     db = db_module.SessionLocal()
     try:
+        if is_sync_running(db):
+            return
         run_sync(db)
     finally:
         db.close()

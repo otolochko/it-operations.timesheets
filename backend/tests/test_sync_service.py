@@ -44,11 +44,11 @@ class FakeJiraClient:
         wanted = set(ids)
         return deepcopy([item for item in self.worklogs if item["id"] in wanted])
 
-    def get_issue(self, issue_id):
-        self.issue_calls.append(issue_id)
-        if issue_id == self.fail_issue_id:
+    def get_issues_by_ids(self, issue_ids, *, on_page=None):
+        self.issue_calls.extend(issue_ids)
+        if self.fail_issue_id in issue_ids:
             raise RuntimeError("simulated Jira issue failure")
-        return deepcopy(self.issues.get(issue_id))
+        return deepcopy([self.issues[i] for i in issue_ids if i in self.issues])
 
     def search_issue_ids(self, jql, *, on_page=None):
         self.jql_calls.append(jql)
@@ -106,15 +106,15 @@ def test_cancel_requested_stops_the_run_without_writing_data(db: Session) -> Non
     issues = {"100": issue(), "101": issue("101", "IN-2")}
     fake = FakeJiraClient(data, issues)
 
-    original_get_issue = fake.get_issue
+    original_get_issues = fake.get_issues_by_ids
 
-    def get_issue_then_request_cancel(issue_id):
-        result = original_get_issue(issue_id)
+    def get_issues_then_request_cancel(issue_ids, *, on_page=None):
+        result = original_get_issues(issue_ids, on_page=on_page)
         db.execute(update(SyncRun).where(SyncRun.status == "running").values(cancel_requested=True))
         db.commit()
         return result
 
-    fake.get_issue = get_issue_then_request_cancel
+    fake.get_issues_by_ids = get_issues_then_request_cancel
 
     result = run_sync(db, fake)
 
@@ -135,6 +135,16 @@ def test_upsert_is_idempotent(db: Session) -> None:
     assert second_values[0].id == "500"
     assert second_values[0].time_spent_seconds == 3600
     assert db.scalar(select(Issue).where(Issue.id == "100")) is not None
+
+
+def test_known_issue_metadata_is_not_refetched(db: Session) -> None:
+    run_sync(db, FakeJiraClient([worklog(seconds=1800)], {"100": issue()}))
+
+    changed = FakeJiraClient([worklog(seconds=7200)], {"100": issue()})
+    run_sync(db, changed)
+
+    assert changed.issue_calls == []
+    assert db.scalar(select(Worklog).where(Worklog.id == "500")).time_spent_seconds == 7200
 
 
 def test_existing_worklog_is_updated_in_place(db: Session) -> None:

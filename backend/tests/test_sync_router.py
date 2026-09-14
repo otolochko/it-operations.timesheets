@@ -229,6 +229,35 @@ def test_cancel_sets_flag_on_running_run(client):
         db.close()
 
 
+def test_run_sync_job_skips_when_a_run_is_already_in_progress(monkeypatch):
+    db = db_module.SessionLocal()
+    try:
+        db.add(
+            SyncRun(
+                started_at=datetime.now(timezone.utc),
+                finished_at=None,
+                status="running",
+                worklogs_upserted=0,
+                worklogs_deleted=0,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    called = False
+
+    def _fail_if_called(db):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(scheduler_module, "run_sync", _fail_if_called)
+
+    scheduler_module._run_sync_job()
+
+    assert called is False
+
+
 def test_croniter_validation_rejects_garbage_accepts_valid():
     with pytest.raises(ValueError):
         scheduler_module.validate_cron("not a cron")

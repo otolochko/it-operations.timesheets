@@ -171,17 +171,48 @@ class JiraClient:
                 on_page(page, len(worklogs))
         return worklogs
 
-    def get_issue(self, issue_id: str) -> dict | None:
-        url = f"{self.base_url}/rest/api/3/issue/{issue_id}"
-        response = self._request(
-            "GET",
-            url,
-            allow_404=True,
-            params={"fields": "summary,project"},
-        )
-        if response.status_code == 404:
-            return None
-        return response.json()
+    def get_issues_by_ids(
+        self,
+        issue_ids: list[str],
+        *,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[dict]:
+        """Fetch summary/project for many issues in batched `id in (...)` searches.
+
+        Issue ids absent from the result (e.g. deleted upstream) are simply
+        omitted rather than erroring, unlike the old per-issue GET endpoint's
+        404 handling.
+        """
+        if not issue_ids:
+            return []
+
+        url = f"{self.base_url}/rest/api/3/search/jql"
+        issues: list[dict] = []
+        page = 0
+        for start in range(0, len(issue_ids), 500):
+            chunk = issue_ids[start : start + 500]
+            jql = f"id in ({','.join(chunk)})"
+            next_page_token: str | None = None
+            while True:
+                body: dict[str, Any] = {
+                    "jql": jql,
+                    "fields": ["summary", "project"],
+                    "maxResults": len(chunk),
+                }
+                if next_page_token is not None:
+                    body["nextPageToken"] = next_page_token
+                response = self._request("POST", url, json=body)
+                payload = response.json()
+                issues.extend(payload.get("issues", []))
+                page += 1
+                if on_page is not None:
+                    on_page(page, len(issues))
+
+                next_page_token = payload.get("nextPageToken")
+                if not next_page_token:
+                    break
+
+        return issues
 
     def search_issue_ids(
         self, jql: str, *, on_page: Callable[[int, int], None] | None = None

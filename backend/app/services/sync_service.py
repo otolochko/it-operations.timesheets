@@ -13,6 +13,11 @@ from app.core.worklog_time import work_date_from_jira_json
 from app.models import Issue, SyncRun, SyncSchedule, SyncState, Worklog
 
 
+def is_sync_running(db: Session) -> bool:
+    latest = db.scalars(select(SyncRun).order_by(SyncRun.id.desc())).first()
+    return latest is not None and latest.status == "running"
+
+
 def get_or_create_schedule(db: Session) -> SyncSchedule:
     schedule = db.get(SyncSchedule, 1)
     if schedule is None:
@@ -196,9 +201,8 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         else:
             allowed_projects = {key for key in schedule.project_keys.split(",") if key}
 
-        # Resolve the set of unique issue ids this run needs metadata for
-        # up front, so the fetch loop below has a known total for progress
-        # reporting instead of an indeterminate count.
+        # Resolve the set of unique issue ids this run touches, up front so
+        # we know which ones we already have locally.
         candidate_issue_ids: list[str] = []
         seen_issue_ids: set[str] = set()
         for worklog_json in worklogs:
@@ -218,36 +222,56 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
             seen_issue_ids.add(issue_id)
             candidate_issue_ids.append(issue_id)
 
-        issue_payloads: dict[str, dict | None] = {}
-        total_issues = len(candidate_issue_ids)
-        # Absolute cadence, not a percentage of total: on a large first sync
-        # (thousands of issues), a percentage-based step could stay silent
-        # for minutes even though every request is succeeding.
-        progress_step = min(25, max(1, total_issues))
-        for i, issue_id in enumerate(candidate_issue_ids, start=1):
-            issue_payloads[issue_id] = client.get_issue(issue_id)
-            if i % progress_step == 0 or i == total_issues:
-                _progress(
+        # Issue key/summary/project rarely change, so an issue already
+        # synced in a prior run doesn't need refetching -- only ask Jira
+        # about ones we've never seen, batched via `id in (...)` search
+        # instead of one GET per issue.
+        issue_rows: dict[str, Issue] = (
+            {
+                issue.id: issue
+                for issue in db.scalars(select(Issue).where(Issue.id.in_(candidate_issue_ids)))
+            }
+            if candidate_issue_ids
+            else {}
+        )
+        missing_issue_ids = [i for i in candidate_issue_ids if i not in issue_rows]
+
+        issue_payloads: dict[str, dict] = {}
+        total_missing = len(missing_issue_ids)
+        if total_missing:
+            _append_log(
+                db,
+                run,
+                f"Fetching metadata for {total_missing} new issues "
+                f"({len(candidate_issue_ids) - total_missing} already known locally)",
+            )
+            fetched_issues = client.get_issues_by_ids(
+                missing_issue_ids,
+                on_page=lambda page, count: _progress(
                     db,
                     run,
                     phase="Fetching issue metadata",
-                    current=i,
-                    total=total_issues,
-                    log=f"Fetching issue metadata: {i}/{total_issues}",
-                )
+                    current=count,
+                    total=total_missing,
+                    log=f"Fetching issue metadata: {count}/{total_missing}",
+                ),
+            )
+            issue_payloads = {str(item["id"]): item for item in fetched_issues}
 
-        in_scope: list[tuple[dict, dict]] = []
+        in_scope: list[tuple[dict, dict | None]] = []
         for worklog_json in worklogs:
             issue_id = str(worklog_json["issueId"])
-            if issue_id not in issue_payloads:
-                continue
-            issue_json = issue_payloads[issue_id]
-            if issue_json is None:
-                continue
+            known_issue = issue_rows.get(issue_id)
+            issue_json = issue_payloads.get(issue_id)
+            if known_issue is None and issue_json is None:
+                continue  # not a candidate, or deleted upstream
 
             if allowed_issue_ids is None:
-                fields = issue_json.get("fields", {})
-                project_key = str(fields["project"]["key"])
+                project_key = (
+                    known_issue.project_key
+                    if known_issue is not None
+                    else str(issue_json["fields"]["project"]["key"])
+                )
                 if allowed_projects and project_key not in allowed_projects:
                     continue
             in_scope.append((worklog_json, issue_json))
@@ -261,16 +285,6 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         )
 
         now = _utcnow()
-
-        # Preload every Issue/Worklog row this run will touch in one query
-        # each, instead of one SELECT per worklog -- a sync batch can cover
-        # hundreds of worklogs across a much smaller set of issues.
-        issue_ids = {str(worklog_json["issueId"]) for worklog_json, _ in in_scope}
-        issue_rows: dict[str, Issue] = (
-            {issue.id: issue for issue in db.scalars(select(Issue).where(Issue.id.in_(issue_ids)))}
-            if issue_ids
-            else {}
-        )
 
         worklog_ids = {str(worklog_json["id"]) for worklog_json, _ in in_scope}
         deleted_ids = {_change_id(change) for change in deleted_changes}
@@ -286,16 +300,20 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
 
         for worklog_json, issue_json in in_scope:
             issue_id = str(worklog_json["issueId"])
-            fields = issue_json.get("fields", {})
             issue = issue_rows.get(issue_id)
             if issue is None:
                 issue = Issue(id=issue_id)
                 db.add(issue)
                 issue_rows[issue_id] = issue
-            issue.key = str(issue_json["key"])
-            issue.project_key = str(fields["project"]["key"])
-            issue.summary = str(fields.get("summary") or "")
-            issue.updated_at = now
+            if issue_json is not None:
+                # None means this issue was already known locally (not
+                # refetched this run) -- its key/summary/project are left
+                # as they were.
+                fields = issue_json.get("fields", {})
+                issue.key = str(issue_json["key"])
+                issue.project_key = str(fields["project"]["key"])
+                issue.summary = str(fields.get("summary") or "")
+                issue.updated_at = now
 
             started = _parse_datetime(worklog_json["started"])
             offset = started.utcoffset()

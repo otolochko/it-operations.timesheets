@@ -146,8 +146,35 @@ def test_updated_feed_pages_and_worklog_list_chunks() -> None:
     assert posted_sizes == [1000, 1000, 1]
 
 
-def test_get_issue_returns_none_for_404() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(404, request=request)
+def test_get_issues_by_ids_batches_and_omits_missing() -> None:
+    requests = []
 
-    assert _client(handler).get_issue("missing") is None
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = __import__("json").loads(request.content)
+        requests.append(body["jql"])
+        # Simulates "3" not matching upstream (e.g. deleted) -- Jira just
+        # omits it from `issues` rather than erroring.
+        return httpx.Response(
+            200,
+            json={
+                "issues": [
+                    {"id": "1", "key": "KEY-1", "fields": {"summary": "s", "project": {"key": "KEY"}}},
+                    {"id": "2", "key": "KEY-2", "fields": {"summary": "s", "project": {"key": "KEY"}}},
+                ],
+                "isLast": True,
+            },
+            request=request,
+        )
+
+    client = _client(handler)
+    results = client.get_issues_by_ids(["1", "2", "3"])
+
+    assert requests == ["id in (1,2,3)"]
+    assert {item["id"] for item in results} == {"1", "2"}
+
+
+def test_get_issues_by_ids_returns_empty_for_no_ids() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("should not make a request for an empty id list")
+
+    assert _client(handler).get_issues_by_ids([]) == []
