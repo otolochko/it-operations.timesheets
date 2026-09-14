@@ -86,9 +86,9 @@ describe('TimesheetsPage', () => {
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.getByText('2026-09-05')).toBeInTheDocument();
     expect(screen.getByText('2026-09-06')).toBeInTheDocument();
-    expect(screen.getByText('1.0')).toBeInTheDocument(); // Alice 09-05
-    expect(screen.getByText('2.0')).toBeInTheDocument(); // Alice 09-06
-    expect(screen.getByText('0.5')).toBeInTheDocument(); // Bob 09-05
+    expect(screen.getByRole('button', { name: '1.0' })).toBeInTheDocument(); // Alice 09-05
+    expect(screen.getByRole('button', { name: '2.0' })).toBeInTheDocument(); // Alice 09-06
+    expect(screen.getByRole('button', { name: '0.5' })).toBeInTheDocument(); // Bob 09-05
   });
 
   it('renders the "No worklogs" message for an empty cells array', async () => {
@@ -107,7 +107,10 @@ describe('TimesheetsPage', () => {
   it('renders summary metrics from the fixture response', async () => {
     renderPage();
 
-    await screen.findByText('3.5');
+    // Appears 3 times: Total hours card, Selected hours card, and the grid's grand total cell.
+    await waitFor(() => {
+      expect(screen.getAllByText('3.5')).toHaveLength(3);
+    });
     expect(screen.getByText('2')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
     expect(screen.getByText('1.8')).toBeInTheDocument(); // average rounded to 1 decimal

@@ -7,6 +7,7 @@ import { PrimaryButton, SecondaryButton } from '@/components/Buttons';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TimesheetGrid } from '@/components/TimesheetGrid';
 import { IssueDrilldownPanel } from '@/components/IssueDrilldownPanel';
+import { AuthorFilter } from '@/components/AuthorFilter';
 import {
   getTimesheetGrid,
   getIssueDrilldown,
@@ -50,6 +51,7 @@ export default function TimesheetsPage() {
   const [grid, setGrid] = React.useState<TimesheetGridResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedAuthorIds, setSelectedAuthorIds] = React.useState<Set<string>>(new Set());
 
   const [drilldown, setDrilldown] = React.useState<IssueDrilldownResponse | null>(null);
   const [drilldownLoading, setDrilldownLoading] = React.useState(false);
@@ -62,7 +64,10 @@ export default function TimesheetsPage() {
     setError(null);
     getTimesheetGrid(fromDate, toDate, group)
       .then((response) => {
-        if (!cancelled) setGrid(response);
+        if (!cancelled) {
+          setGrid(response);
+          setSelectedAuthorIds(new Set(response.cells.map((cell) => cell.author_account_id)));
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -98,6 +103,19 @@ export default function TimesheetsPage() {
 
   const summary = grid?.summary;
 
+  const authorOptions = React.useMemo(() => {
+    if (!grid) return [];
+    return Array.from(
+      new Map(grid.cells.map((cell) => [cell.author_account_id, cell.author_display_name])),
+      ([accountId, displayName]) => ({ accountId, displayName }),
+    ).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [grid]);
+
+  const filteredCells =
+    grid?.cells.filter((cell) => selectedAuthorIds.has(cell.author_account_id)) ?? [];
+
+  const selectedTotalSeconds = filteredCells.reduce((sum, cell) => sum + cell.total_seconds, 0);
+
   return (
     <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 p-4 md:p-8">
       <header>
@@ -125,6 +143,11 @@ export default function TimesheetsPage() {
               className="rounded-md border border-border bg-field-bg px-3 py-2 text-sm text-text-primary"
             />
           </FormField>
+          <AuthorFilter
+            authors={authorOptions}
+            selected={selectedAuthorIds}
+            onChange={setSelectedAuthorIds}
+          />
           <div className="flex gap-2">
             {[
               { label: 'This week', range: getThisWeekRange },
@@ -179,7 +202,7 @@ export default function TimesheetsPage() {
       ) : (
         <>
           {summary ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
               <PanelCard title="Total hours">
                 <p className="text-2xl font-semibold text-text-primary">
                   {formatSecondsWithMode(summary.total_hours * 3600, format)}
@@ -200,13 +223,18 @@ export default function TimesheetsPage() {
                   {formatSecondsWithMode(summary.average_hours_per_author * 3600, format)}
                 </p>
               </PanelCard>
+              <PanelCard title="Selected hours">
+                <p className="text-2xl font-semibold text-text-primary">
+                  {formatSecondsWithMode(selectedTotalSeconds, format)}
+                </p>
+              </PanelCard>
             </div>
           ) : null}
 
           {loading ? (
             <p className="text-sm text-text-muted">Loading...</p>
           ) : (
-            <TimesheetGrid cells={grid?.cells ?? []} onCellClick={handleCellClick} />
+            <TimesheetGrid cells={filteredCells} onCellClick={handleCellClick} />
           )}
         </>
       )}
