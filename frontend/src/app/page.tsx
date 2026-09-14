@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { TimesheetGrid } from '@/components/TimesheetGrid';
 import { IssueDrilldownPanel } from '@/components/IssueDrilldownPanel';
 import { AuthorFilter } from '@/components/AuthorFilter';
+import { DashboardCharts } from '@/components/DashboardCharts';
 import {
   getTimesheetGrid,
   getIssueDrilldown,
@@ -285,6 +286,10 @@ export default function TimesheetsPage() {
                 </p>
               </PanelCard>
             </div>
+          ) : null}
+
+          {!loading && filteredCells.length > 0 ? (
+            <DashboardCharts cells={filteredCells} />
           ) : null}
 
           {loading ? (

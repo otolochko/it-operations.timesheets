@@ -17,6 +17,8 @@ frontend/src/
 │       └── page.tsx               # Sync, schedule, and display settings page
 ├── components/
 │   ├── Buttons.tsx                # PrimaryButton, SecondaryButton, DangerButton
+│   ├── DashboardCharts.tsx        # Stacked time trend and author ranking charts
+│   ├── DashboardCharts.test.tsx   # Unit tests for chart aggregation and author grouping
 │   ├── DisplaySettingsPanel.tsx    # Browser-local hours display format controls
 │   ├── FormField.tsx              # Form field container with label, hint, and error display
 │   ├── IssueDrilldownPanel.tsx    # Modal panel displaying issue-level worklog breakdowns
@@ -74,6 +76,8 @@ Tokens are declared on `:root` and overridden under `:root[data-theme='dark']`. 
 | `--sidebar` | `#ffffff` | `#0f1829` | `bg-sidebar` |
 | `--sidebar-hover` | `#f1f5f9` | `#182338` | `bg-sidebar-hover` |
 | `--accent-soft` | `#eff6ff` | `#172c4e` | `bg-accent-soft` |
+| `--chart-1` … `--chart-6` | Categorical light palette | Categorical dark palette | `bg-chart-1` … `bg-chart-6` |
+| `--chart-other` | `#64748b` | `#94a3b8` | `bg-chart-other` |
 
 `frontend/src/app/layout.tsx` resolves the stored theme before the first render, falling back
 to the operating-system preference. `ThemeProvider` keeps `data-theme`, `color-scheme`, and
@@ -98,6 +102,7 @@ The log viewer requires a fixed, always-dark terminal appearance. These tokens a
 | Component | Path | Responsibility |
 |---|---|---|
 | `PrimaryButton`, `SecondaryButton`, `SuccessButton`, `DangerButton` | `frontend/src/components/Buttons.tsx` | Standardized button variants with loading/disabled styling. |
+| `DashboardCharts` | `frontend/src/components/DashboardCharts.tsx` | Responsive stacked period chart and top-author ranking derived from filtered grid cells. |
 | `FormField` | `frontend/src/components/FormField.tsx` | Form input wrapper providing label, hint text, and error text. |
 | `PanelCard` | `frontend/src/components/PanelCard.tsx` | White/dark card container with optional header title. |
 | `StatusBadge` | `frontend/src/components/StatusBadge.tsx` | Pill status badge styled by `'info'`, `'success'`, or `'danger'`. |

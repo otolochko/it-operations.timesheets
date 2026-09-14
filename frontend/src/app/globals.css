@@ -23,6 +23,13 @@
   --sidebar: #ffffff;
   --sidebar-hover: #f1f5f9;
   --accent-soft: #eff6ff;
+  --chart-1: #2563eb;
+  --chart-2: #7c3aed;
+  --chart-3: #059669;
+  --chart-4: #d97706;
+  --chart-5: #db2777;
+  --chart-6: #0891b2;
+  --chart-other: #64748b;
   --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04);
   --shadow-accent: 0 8px 20px rgb(37 99 235 / 0.22);
 }
@@ -48,6 +55,13 @@
   --sidebar: #0f1829;
   --sidebar-hover: #182338;
   --accent-soft: #172c4e;
+  --chart-1: #60a5fa;
+  --chart-2: #a78bfa;
+  --chart-3: #34d399;
+  --chart-4: #fbbf24;
+  --chart-5: #f472b6;
+  --chart-6: #22d3ee;
+  --chart-other: #94a3b8;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.2), 0 10px 28px rgb(0 0 0 / 0.16);
   --shadow-accent: 0 8px 20px rgb(59 130 246 / 0.2);
 }

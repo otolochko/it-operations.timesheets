@@ -85,8 +85,8 @@ describe('TimesheetsPage', () => {
   it('renders the grid with correct rows, columns, and hour values', async () => {
     renderPage();
 
-    await screen.findByText('Alice');
-    expect(screen.getByText('Bob')).toBeInTheDocument();
+    await screen.findAllByText('Alice');
+    expect(screen.getAllByText('Bob').length).toBeGreaterThan(0);
     expect(screen.getByText('2026-09-05')).toBeInTheDocument();
     expect(screen.getByText('2026-09-06')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '1.0' })).toBeInTheDocument(); // Alice 09-05
@@ -138,7 +138,7 @@ describe('TimesheetsPage', () => {
     vi.stubGlobal('open', open);
 
     renderPage();
-    await screen.findByText('Alice');
+    await screen.findAllByText('Alice');
 
     fireEvent.click(screen.getByRole('button', { name: 'Export Excel' }));
 
@@ -158,7 +158,7 @@ describe('TimesheetsPage', () => {
     vi.stubGlobal('open', open);
 
     renderPage();
-    await screen.findByText('Alice');
+    await screen.findAllByText('Alice');
 
     fireEvent.click(screen.getByRole('button', { name: 'Week' }));
     fireEvent.click(screen.getByRole('button', { name: 'Export Excel' }));
@@ -202,7 +202,7 @@ describe('TimesheetsPage', () => {
   it('persists filters and selected authors in storage and the URL', async () => {
     renderPage();
 
-    await screen.findByText('Alice');
+    await screen.findAllByText('Alice');
     fireEvent.change(screen.getByLabelText('From'), { target: { value: '2026-08-01' } });
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-08-31' } });
     fireEvent.click(screen.getByRole('button', { name: 'Week' }));
@@ -250,7 +250,7 @@ describe('TimesheetsPage', () => {
       );
     });
     expect(await screen.findByRole('button', { name: 'Authors (1/2)' })).toBeInTheDocument();
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getAllByText('Alice').length).toBeGreaterThan(0);
     expect(screen.queryByText('Bob')).not.toBeInTheDocument();
   });
 });

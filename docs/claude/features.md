@@ -6,11 +6,11 @@ User-facing features, endpoint routes, service logic, UI components, and behavio
 
 ## Timesheets
 
-Provides an interactive matrix of Jira worklog hours aggregated by author across daily or weekly periods, summary metric tiles, and issue-level drill-down upon clicking any cell. Operates purely synchronously against PostgreSQL with zero direct Jira calls.
+Provides an interactive matrix of Jira worklog hours aggregated by author across daily or weekly periods, summary metric tiles, trend and author-ranking charts, and issue-level drill-down upon clicking any cell. Operates purely synchronously against PostgreSQL with zero direct Jira calls.
 
 - **Router**: `backend/app/routers/timesheets.py` — endpoints: `GET /api/timesheets` (query params: `from`, `to`, `group=day|week`), `GET /api/timesheets/issues` (query params: `author`, `from`, `to`), `GET /api/timesheets/export` (query params: `from`, `to`, `group=day|week`, `format=csv|xlsx`, `dataset=matrix|raw|issues`)
 - **Service**: `backend/app/services/timesheet_service.py` — `get_timesheet_grid()` (aggregates author and period totals and computes total hours, author count, issue count, and average hours per author), `get_issue_drilldown()` (queries issue summaries, logged seconds, and worklog counts for a single author and date range), `get_all_issue_totals()` (queries all-authors per-issue totals across date range); `backend/app/services/export_service.py` — `build_csv()`, `build_xlsx()` (shapes aggregated timesheet and issue totals into CSV text or styled multi-sheet XLSX workbooks)
-- **Frontend**: `frontend/src/app/page.tsx` (supported by `frontend/src/components/TimesheetGrid.tsx` and `frontend/src/components/IssueDrilldownPanel.tsx`)
+- **Frontend**: `frontend/src/app/page.tsx` (supported by `frontend/src/components/DashboardCharts.tsx`, `frontend/src/components/TimesheetGrid.tsx`, and `frontend/src/components/IssueDrilldownPanel.tsx`)
 - **Schemas**: `backend/app/schemas/timesheets.py` — `TimesheetCell`, `TimesheetSummary`, `TimesheetGridResponse`, `IssueWorklogEntry`, `IssueDrilldownResponse`
 - **Gotchas**:
   - `work_date` is derived from the author's local timezone offset at the time work was logged (`backend/app/core/worklog_time.py`). Normalizing timestamps to UTC shifts calendar dates across midnight boundaries for authors in non-UTC time zones.
@@ -22,6 +22,7 @@ Provides an interactive matrix of Jira worklog hours aggregated by author across
   - An empty date range returns a valid header-only file with HTTP 200 rather than an error, consistent with the empty-grid behavior of `GET /api/timesheets`.
   - CSV exports offer both `matrix` and `raw` datasets: `matrix` mirrors the on-screen author-by-period grid with row and column totals, whereas `raw` provides normalized long-format records (`Author, Account ID, Period, Hours`) suited for spreadsheet pivot tables.
   - Dashboard date, grouping, and author filters persist through `frontend/src/lib/timesheetViewState.ts`; URL parameters override browser storage, while browser storage restores the last view after navigation through the sidebar.
+  - Dashboard charts reuse the already fetched and author-filtered grid cells; the stacked chart shows the six highest-total authors and combines additional authors into `Others`, while the ranking shows at most eight authors.
 
 ---
 
