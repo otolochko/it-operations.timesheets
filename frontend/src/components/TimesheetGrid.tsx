@@ -37,7 +37,7 @@ export function TimesheetGrid({ cells, onCellClick }: TimesheetGridProps) {
     <PanelCard>
       <div className="overflow-x-auto">
         <table className="w-full min-w-max text-left text-sm">
-          <thead>
+          <thead className="bg-surface-raised">
             <tr>
               <th className="border-b border-border px-3 py-2 font-medium text-text-muted">
                 Author
@@ -54,7 +54,7 @@ export function TimesheetGrid({ cells, onCellClick }: TimesheetGridProps) {
           </thead>
           <tbody>
             {authors.map(([accountId, displayName]) => (
-              <tr key={accountId}>
+              <tr key={accountId} className="transition-colors hover:bg-surface-raised">
                 <td className="border-b border-border px-3 py-2 text-text-primary">
                   {displayName}
                 </td>

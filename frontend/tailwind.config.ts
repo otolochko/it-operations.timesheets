@@ -26,6 +26,9 @@ const config: Config = {
         'surface-raised': 'var(--surface-raised)',
         'surface-overlay': 'var(--surface-overlay)',
         'brand-2': 'var(--brand-2)',
+        sidebar: 'var(--sidebar)',
+        'sidebar-hover': 'var(--sidebar-hover)',
+        'accent-soft': 'var(--accent-soft)',
         // Fixed, always-dark terminal palette used only by the log viewer.
         'log-bg': 'var(--log-bg)',
         'log-text': 'var(--log-text)',
@@ -36,6 +39,10 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-sans)'],
         mono: ['var(--font-mono)'],
+      },
+      boxShadow: {
+        card: 'var(--shadow-card)',
+        accent: 'var(--shadow-accent)',
       },
     },
   },

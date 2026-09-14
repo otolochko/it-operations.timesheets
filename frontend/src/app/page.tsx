@@ -99,8 +99,13 @@ export default function TimesheetsPage() {
   const summary = grid?.summary;
 
   return (
-    <div className="flex flex-col gap-6 p-6">
-      <h1 className="text-xl font-semibold text-text-primary">Jira Timesheets</h1>
+    <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 p-4 md:p-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary">Jira Timesheets</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          Review logged time across people, days, and issues.
+        </p>
+      </header>
 
       <PanelCard>
         <div className="flex flex-wrap items-end gap-4">

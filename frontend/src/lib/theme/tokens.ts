@@ -16,6 +16,9 @@ export const tokens = {
   surfaceRaised: 'var(--surface-raised)',
   surfaceOverlay: 'var(--surface-overlay)',
   brand2: 'var(--brand-2)',
+  sidebar: 'var(--sidebar)',
+  sidebarHover: 'var(--sidebar-hover)',
+  accentSoft: 'var(--accent-soft)',
 } as const;
 
 // Fixed, always-dark terminal palette used ONLY by the LogViewer component.

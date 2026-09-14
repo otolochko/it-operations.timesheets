@@ -17,6 +17,11 @@
   --surface-raised: #f1f5f9;
   --surface-overlay: #ffffff;
   --brand-2: #7c3aed;
+  --sidebar: #ffffff;
+  --sidebar-hover: #f1f5f9;
+  --accent-soft: #eff6ff;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.04);
+  --shadow-accent: 0 8px 20px rgb(37 99 235 / 0.22);
 }
 
 :root[data-theme='dark'] {
@@ -34,6 +39,11 @@
   --surface-raised: #182338;
   --surface-overlay: #1a2540;
   --brand-2: #a78bfa;
+  --sidebar: #0f1829;
+  --sidebar-hover: #182338;
+  --accent-soft: #172c4e;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.2), 0 10px 28px rgb(0 0 0 / 0.16);
+  --shadow-accent: 0 8px 20px rgb(59 130 246 / 0.2);
 }
 
 /* Fixed, always-dark terminal palette used ONLY by the log viewer component.
@@ -46,8 +56,37 @@
   --log-accent: #22d3ee;
 }
 
+html {
+  min-height: 100%;
+  background-color: var(--bg);
+}
+
 body {
+  min-height: 100%;
+  margin: 0;
   background-color: var(--bg);
   color: var(--text-primary);
   font-family: var(--font-sans), sans-serif;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }

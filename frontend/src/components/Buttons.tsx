@@ -7,7 +7,7 @@ type ButtonProps = React.ComponentPropsWithoutRef<'button'>;
 export function PrimaryButton({ className = '', children, ...props }: ButtonProps) {
   return (
     <button
-      className={`rounded-md bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white shadow-accent transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     >
       {children}
@@ -18,7 +18,7 @@ export function PrimaryButton({ className = '', children, ...props }: ButtonProp
 export function SecondaryButton({ className = '', children, ...props }: ButtonProps) {
   return (
     <button
-      className={`rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     >
       {children}
@@ -29,7 +29,7 @@ export function SecondaryButton({ className = '', children, ...props }: ButtonPr
 export function DangerButton({ className = '', children, ...props }: ButtonProps) {
   return (
     <button
-      className={`rounded-md bg-danger px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     >
       {children}
