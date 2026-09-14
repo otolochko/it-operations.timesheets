@@ -24,6 +24,7 @@ class JiraClient:
         api_token: str | None = None,
         max_retries: int | None = None,
         retry_base_seconds: float | None = None,
+        timeout_seconds: float | None = None,
         client: httpx.Client | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
@@ -42,7 +43,8 @@ class JiraClient:
             auth=httpx.BasicAuth(
                 email or settings.jira_email,
                 api_token or settings.jira_api_token,
-            )
+            ),
+            timeout=settings.jira_timeout_seconds if timeout_seconds is None else timeout_seconds,
         )
         self.last_deleted_until: int | None = None
 
@@ -76,7 +78,14 @@ class JiraClient:
         self, method: str, url: str, *, allow_404: bool = False, **kwargs: Any
     ) -> httpx.Response:
         for attempt in range(self.max_retries + 1):
-            response = self._client.request(method, url, **kwargs)
+            try:
+                response = self._client.request(method, url, **kwargs)
+            except httpx.TransportError:
+                if attempt == self.max_retries:
+                    raise
+                self._sleep(self.retry_base_seconds * (2**attempt))
+                continue
+
             if response.status_code != 429:
                 if allow_404 and response.status_code == 404:
                     return response

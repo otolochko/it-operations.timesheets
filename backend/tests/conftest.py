@@ -11,6 +11,7 @@ os.environ.update(
         "JIRA_API_TOKEN": "test-token",
         "JIRA_MAX_RETRIES": "2",
         "JIRA_RETRY_BASE_SECONDS": "0.01",
+        "JIRA_TIMEOUT_SECONDS": "5",
         "JIRA_PROJECT_KEYS": "IN",
         "SYNC_DEFAULT_CRON": "0 * * * *",
     }

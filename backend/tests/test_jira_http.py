@@ -59,6 +59,48 @@ def test_429_raises_after_max_retries() -> None:
     assert sleeps == [0.25, 0.5]
 
 
+def test_transport_error_retries_and_succeeds() -> None:
+    calls = 0
+    sleeps = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return httpx.Response(
+            200,
+            json={"values": [], "until": 1234, "lastPage": True},
+            request=request,
+        )
+
+    client = _client(handler, base=0.25, sleep=sleeps.append)
+    values, until = client.get_updated_worklog_ids(0)
+
+    assert values == []
+    assert until == 1234
+    assert calls == 2
+    assert sleeps == [0.25]
+
+
+def test_transport_error_raises_after_max_retries() -> None:
+    calls = 0
+    sleeps = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ConnectTimeout("connect timed out", request=request)
+
+    client = _client(handler, retries=2, base=0.25, sleep=sleeps.append)
+
+    with pytest.raises(httpx.ConnectTimeout):
+        client.get_deleted_worklog_ids(0)
+
+    assert calls == 3
+    assert sleeps == [0.25, 0.5]
+
+
 def test_updated_feed_pages_and_worklog_list_chunks() -> None:
     get_calls = 0
     posted_sizes = []

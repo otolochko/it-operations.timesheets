@@ -11,6 +11,7 @@ The `JiraClient` class in `backend/app/core/jira_http.py` manages all outbound c
 - **Base URL**: Defaults to `settings.jira_base_url.rstrip("/")`.
 - **Authentication**: HTTP Basic Auth via `httpx.BasicAuth(email, api_token)` using technical user credentials (`settings.jira_email` and `settings.jira_api_token`). Never uses per-user OAuth tokens.
 - **Client Lifecycle**: Supports context manager usage (`with JiraClient() as client:`). Internal `httpx.Client` is closed on exit when instantiated by the class.
+- **Timeout**: `settings.jira_timeout_seconds` (env `JIRA_TIMEOUT_SECONDS`) applied uniformly to connect/read/write/pool via `httpx.Client(timeout=...)`. Without this, httpx's undocumented 5-second default was too short for large `worklog/list` batches.
 
 ### Constructor Signature
 
@@ -23,6 +24,7 @@ def __init__(
     api_token: str | None = None,
     max_retries: int | None = None,
     retry_base_seconds: float | None = None,
+    timeout_seconds: float | None = None,
     client: httpx.Client | None = None,
     sleep: Callable[[float], None] = time.sleep,
 ) -> None: ...
@@ -37,18 +39,15 @@ def __init__(
 | `get_worklogs_by_ids(worklog_ids: list[str]) -> list[dict]` | `POST /rest/api/3/worklog/list` | Fetches full worklog objects for up to 1,000 IDs per request. Automatically slices larger ID lists into multiple 1,000-element requests and concatenates the resulting arrays. |
 | `get_issue(issue_id: str) -> dict | None` | `GET /rest/api/3/issue/{issue_id}` | Retrieves issue summary and project key (`fields=summary,project`). Returns `None` if Jira responds with HTTP 404 (e.g. issue deleted upstream). |
 | `search_issue_ids(jql: str) -> set[str]` | `POST /rest/api/3/search/jql` | Resolves a JQL clause to the set of matching issue IDs. Paginates via `nextPageToken`, requesting only `fields: ["id"]` to minimize payload. Used to scope a sync run when `SyncSchedule.jql_filter` is set. |
-| `validate_jql(jql: str) -> None` | `POST /rest/api/3/search/jql` | Lightweight syntax check (`maxResults: 0`, `fields: []`). Raises `ValueError` with Jira's `errorMessages` on HTTP 400; does not use the retry-on-429 path since it's a one-off save-time check. |
+| `validate_jql(jql: str) -> None` | `POST /rest/api/3/search/jql` | Lightweight syntax check (`maxResults: 1`, `fields: []`; Jira rejects `maxResults: 0` outright). Raises `ValueError` with Jira's `errorMessages` on HTTP 400; does not use the retry-on-429 path since it's a one-off save-time check. |
 
 ### Retry and Throttling Policy
 
-Outbound requests handle Jira Cloud rate limiting (HTTP 429) automatically:
+Outbound requests handle Jira Cloud rate limiting (HTTP 429) and transport-level failures (timeouts, connection errors) automatically, both via the same exponential backoff in `_request`:
 
-1. Checks HTTP response status code for 429.
-2. Extracts wait delay from the `Retry-After` header (accepts either integer seconds or HTTP-date format).
-3. Computes exponential backoff: `backoff = self.retry_base_seconds * (2 ** attempt)`.
-4. Sleeps for `max(backoff, retry_after or 0.0)`.
-5. Retries up to `self.max_retries` attempts before raising `httpx.HTTPStatusError`.
-6. Non-429 client and server errors trigger immediate `response.raise_for_status()` (except 404 when `allow_404=True`).
+1. **429 responses**: extracts wait delay from the `Retry-After` header (accepts either integer seconds or HTTP-date format), computes `backoff = self.retry_base_seconds * (2 ** attempt)`, sleeps `max(backoff, retry_after or 0.0)`, retries up to `self.max_retries` attempts before raising `httpx.HTTPStatusError`.
+2. **`httpx.TransportError`** (covers `TimeoutException` — connect/read/write/pool timeouts — and connection-level errors like `ConnectError`): retries up to `self.max_retries` attempts with the same `backoff = self.retry_base_seconds * (2 ** attempt)` sleep, no `Retry-After` involved; re-raises the original exception after the last attempt.
+3. Non-429 HTTP client and server errors trigger immediate `response.raise_for_status()` (except 404 when `allow_404=True`) — these are not retried.
 
 ### Runnable Usage Example
 

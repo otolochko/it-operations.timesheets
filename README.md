@@ -137,6 +137,7 @@ All configuration is driven by environment variables defined in `.env`:
 | `JIRA_API_TOKEN` | API token generated for the technical user | `your-api-token` |
 | `JIRA_MAX_RETRIES` | Maximum retry attempts for rate-limited requests | `5` |
 | `JIRA_RETRY_BASE_SECONDS` | Initial backoff sleep delay in seconds | `1` |
+| `JIRA_TIMEOUT_SECONDS` | Per-request connect/read/write/pool timeout in seconds | `30` |
 | `JIRA_PROJECT_KEYS` | Comma-separated Jira project keys to sync | `PROJ1,PROJ2` |
 
 ### Synchronization and CORS

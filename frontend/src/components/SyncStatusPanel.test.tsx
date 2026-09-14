@@ -8,6 +8,7 @@ import * as api from '@/lib/api';
 vi.mock('@/lib/api', () => ({
   getSyncStatus: vi.fn(),
   triggerSync: vi.fn(),
+  cancelSync: vi.fn(),
 }));
 
 const mockedApi = vi.mocked(api);
@@ -101,6 +102,45 @@ describe('SyncStatusPanel', () => {
 
     await waitFor(() => expect(screen.getByText('Fetching issue metadata')).toBeInTheDocument());
     expect(screen.getByText('10/40 (25%)')).toBeInTheDocument();
+  });
+
+  it('shows a Stop sync button while running and calls cancelSync when clicked', async () => {
+    mockedApi.getSyncStatus.mockResolvedValue({
+      latest_run: {
+        id: 5,
+        started_at: '2026-09-11T10:00:00Z',
+        finished_at: null,
+        status: 'running',
+        worklogs_upserted: 0,
+        worklogs_deleted: 0,
+        error: null,
+        log_text: 'Sync started',
+        progress_phase: null,
+        progress_current: 0,
+        progress_total: null,
+      },
+      is_running: true,
+    });
+    mockedApi.cancelSync.mockResolvedValue({ run_id: 5, status: 'running' });
+
+    render(<SyncStatusPanel />);
+
+    const stopButton = await screen.findByRole('button', { name: /stop sync/i });
+
+    await act(async () => {
+      fireEvent.click(stopButton);
+    });
+
+    expect(mockedApi.cancelSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show a Stop sync button when no run is in progress', async () => {
+    mockedApi.getSyncStatus.mockResolvedValue({ latest_run: null, is_running: false });
+
+    render(<SyncStatusPanel />);
+
+    await waitFor(() => expect(screen.getByText('Never synced')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /stop sync/i })).not.toBeInTheDocument();
   });
 
   it('triggers sync, disables the button while running, and re-enables when polling shows completion', async () => {

@@ -2,10 +2,11 @@
 
 import * as React from 'react';
 import { PanelCard } from '@/components/PanelCard';
-import { PrimaryButton } from '@/components/Buttons';
+import { PrimaryButton, DangerButton } from '@/components/Buttons';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LogViewer } from '@/components/LogViewer';
 import {
+  cancelSync,
   getSyncStatus,
   triggerSync,
   type SyncRunSummary,
@@ -21,7 +22,7 @@ function formatTimestamp(iso: string | null): string {
 
 function badgeForStatus(status: SyncRunSummary['status']): 'info' | 'success' | 'danger' {
   if (status === 'success') return 'success';
-  if (status === 'failed') return 'danger';
+  if (status === 'failed' || status === 'cancelled') return 'danger';
   return 'info';
 }
 
@@ -59,6 +60,7 @@ export function SyncStatusPanel() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [triggering, setTriggering] = React.useState(false);
+  const [cancelling, setCancelling] = React.useState(false);
 
   const fetchStatus = React.useCallback(async () => {
     try {
@@ -96,6 +98,18 @@ export function SyncStatusPanel() {
     }
   }
 
+  async function handleStopSync() {
+    setCancelling(true);
+    try {
+      await cancelSync();
+      await fetchStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to stop sync.');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const isRunning = Boolean(status?.is_running);
   const latestRun = status?.latest_run ?? null;
 
@@ -116,6 +130,11 @@ export function SyncStatusPanel() {
             <PrimaryButton onClick={handleSyncNow} disabled={isRunning || triggering}>
               {isRunning ? 'Sync in progress...' : 'Sync now'}
             </PrimaryButton>
+            {isRunning ? (
+              <DangerButton onClick={handleStopSync} disabled={cancelling}>
+                {cancelling ? 'Stopping...' : 'Stop sync'}
+              </DangerButton>
+            ) : null}
           </div>
 
           {isRunning && latestRun?.progress_phase ? (

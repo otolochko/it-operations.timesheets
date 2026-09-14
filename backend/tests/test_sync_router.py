@@ -195,6 +195,40 @@ def test_trigger_worklogs_returns_run_id_visible_in_status(client, monkeypatch):
     assert status_response.json()["latest_run"]["id"] == body["run_id"]
 
 
+def test_cancel_returns_409_when_nothing_running(client):
+    response = client.post("/api/sync/worklogs/cancel")
+
+    assert response.status_code == 409
+
+
+def test_cancel_sets_flag_on_running_run(client):
+    db = db_module.SessionLocal()
+    try:
+        run = SyncRun(
+            started_at=datetime.now(timezone.utc),
+            finished_at=None,
+            status="running",
+            worklogs_upserted=0,
+            worklogs_deleted=0,
+        )
+        db.add(run)
+        db.commit()
+        run_id = run.id
+    finally:
+        db.close()
+
+    response = client.post("/api/sync/worklogs/cancel")
+
+    assert response.status_code == 200
+    assert response.json() == {"run_id": run_id, "status": "running"}
+
+    db = db_module.SessionLocal()
+    try:
+        assert db.get(SyncRun, run_id).cancel_requested is True
+    finally:
+        db.close()
+
+
 def test_croniter_validation_rejects_garbage_accepts_valid():
     with pytest.raises(ValueError):
         scheduler_module.validate_cron("not a cron")

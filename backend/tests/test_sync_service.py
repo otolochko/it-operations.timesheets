@@ -2,7 +2,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -99,6 +99,27 @@ def test_progress_reflects_completion(db: Session) -> None:
 
     assert result.progress_phase == "Completed"
     assert result.progress_current == result.progress_total
+
+
+def test_cancel_requested_stops_the_run_without_writing_data(db: Session) -> None:
+    data = [worklog("500", "100", "IN-1"), worklog("501", "101", "IN-2")]
+    issues = {"100": issue(), "101": issue("101", "IN-2")}
+    fake = FakeJiraClient(data, issues)
+
+    original_get_issue = fake.get_issue
+
+    def get_issue_then_request_cancel(issue_id):
+        result = original_get_issue(issue_id)
+        db.execute(update(SyncRun).where(SyncRun.status == "running").values(cancel_requested=True))
+        db.commit()
+        return result
+
+    fake.get_issue = get_issue_then_request_cancel
+
+    result = run_sync(db, fake)
+
+    assert result.status == "cancelled"
+    assert db.scalars(select(Worklog)).all() == []
 
 
 def test_upsert_is_idempotent(db: Session) -> None:

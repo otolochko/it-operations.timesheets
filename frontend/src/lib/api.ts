@@ -131,6 +131,10 @@ export function triggerSync(): Promise<SyncTriggerResponse> {
   return request<SyncTriggerResponse>('/api/sync/worklogs', { method: 'POST' });
 }
 
+export function cancelSync(): Promise<SyncTriggerResponse> {
+  return request<SyncTriggerResponse>('/api/sync/worklogs/cancel', { method: 'POST' });
+}
+
 export function getSyncSchedule(): Promise<SyncScheduleResponse> {
   return request<SyncScheduleResponse>('/api/sync/schedule');
 }

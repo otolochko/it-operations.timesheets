@@ -60,6 +60,10 @@ def _change_id(change: dict) -> str:
     return str(value)
 
 
+class SyncCancelled(Exception):
+    """Raised when a user requests cancellation of an in-progress sync run."""
+
+
 def _append_log(db: Session, run: SyncRun, message: str) -> None:
     run.log_text = f"{run.log_text or ''}{message}\n"
     db.commit()
@@ -80,6 +84,10 @@ def _progress(
     if log is not None:
         run.log_text = f"{run.log_text or ''}{log}\n"
     db.commit()
+    # expire_on_commit means this re-reads the row, picking up a cancel
+    # request made by a concurrent request between checkpoints.
+    if run.cancel_requested:
+        raise SyncCancelled()
 
 
 def _issue_key_from_worklog(worklog: dict) -> str | None:
@@ -335,6 +343,18 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         db.commit()
         db.refresh(run)
         return run
+    except SyncCancelled:
+        progress_log = run.log_text
+        db.rollback()
+        cancelled_run = db.get(SyncRun, run_id)
+        if cancelled_run is None:
+            raise RuntimeError(f"Sync run {run_id} disappeared") from None
+        cancelled_run.status = "cancelled"
+        cancelled_run.finished_at = _utcnow()
+        cancelled_run.log_text = progress_log
+        _append_log(db, cancelled_run, "Sync cancelled by user")
+        db.commit()
+        return cancelled_run
     except Exception as exc:
         progress_log = run.log_text
         db.rollback()

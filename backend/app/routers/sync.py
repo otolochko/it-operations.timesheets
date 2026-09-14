@@ -88,6 +88,23 @@ def trigger_sync(db: Session = Depends(get_db)) -> SyncTriggerResponse:
     return SyncTriggerResponse(run_id=run_id, status=status)
 
 
+@router.post("/worklogs/cancel", response_model=SyncTriggerResponse)
+def cancel_sync(db: Session = Depends(get_db)) -> SyncTriggerResponse:
+    """Request cancellation of the in-progress sync run, if any.
+
+    Cooperative: `run_sync` only notices the flag at its own checkpoints
+    (between Jira calls), so the run stops shortly after this returns, not
+    immediately.
+    """
+    running = _latest_run(db)
+    if running is None or running.status != "running":
+        raise HTTPException(status_code=409, detail="No sync run is currently in progress")
+
+    running.cancel_requested = True
+    db.commit()
+    return SyncTriggerResponse(run_id=running.id, status=running.status)
+
+
 @router.get("/status", response_model=SyncStatusResponse)
 def get_status(db: Session = Depends(get_db)) -> SyncStatusResponse:
     latest = _latest_run(db)
