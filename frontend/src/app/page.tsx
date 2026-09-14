@@ -179,11 +179,6 @@ export default function TimesheetsPage() {
           </div>
           <div className="flex gap-2">
             <SecondaryButton
-              onClick={() => window.open(getExportUrl(fromDate, toDate, group, 'csv'))}
-            >
-              Export CSV
-            </SecondaryButton>
-            <SecondaryButton
               onClick={() => window.open(getExportUrl(fromDate, toDate, group, 'xlsx'))}
             >
               Export Excel

@@ -130,23 +130,20 @@ describe('TimesheetsPage', () => {
     expect(screen.getByText('Fix bug')).toBeInTheDocument();
   });
 
-  it.each([
-    ['Export CSV', 'csv'],
-    ['Export Excel', 'xlsx'],
-  ])('%s exports the current range and grouping', async (label, expectedFormat) => {
+  it('Export Excel exports the current range and grouping', async () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
 
     renderPage();
     await screen.findByText('Alice');
 
-    fireEvent.click(screen.getByRole('button', { name: label }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export Excel' }));
 
     expect(api.getExportUrl).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
       'day',
-      expectedFormat,
+      'xlsx',
     );
     expect(open).toHaveBeenCalledWith('http://api.test/export');
 
@@ -161,13 +158,13 @@ describe('TimesheetsPage', () => {
     await screen.findByText('Alice');
 
     fireEvent.click(screen.getByRole('button', { name: 'Week' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export Excel' }));
 
     expect(api.getExportUrl).toHaveBeenLastCalledWith(
       expect.any(String),
       expect.any(String),
       'week',
-      'csv',
+      'xlsx',
     );
 
     vi.unstubAllGlobals();
