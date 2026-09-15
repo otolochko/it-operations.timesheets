@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,9 +14,37 @@ from app.core.worklog_time import work_date_from_jira_json
 from app.models import Issue, SyncRun, SyncSchedule, SyncState, Worklog
 
 
-def is_sync_running(db: Session) -> bool:
-    latest = db.scalars(select(SyncRun).order_by(SyncRun.id.desc())).first()
-    return latest is not None and latest.status == "running"
+def reserve_sync_run(db: Session) -> tuple[SyncRun, bool]:
+    """Atomically reserve the sole permitted running sync.
+
+    The partial unique index on ``sync_runs.status`` is the arbiter here, not
+    an application-level read followed by an insert.  Therefore independent
+    web workers and APScheduler processes cannot both start a Jira sync.
+    """
+    run = SyncRun(
+        started_at=_utcnow(),
+        status="running",
+        worklogs_upserted=0,
+        worklogs_deleted=0,
+        log_text="Sync started\n",
+    )
+    try:
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+        return run, True
+    except IntegrityError:
+        db.rollback()
+        running = db.scalars(
+            select(SyncRun)
+            .where(SyncRun.status == "running")
+            .order_by(SyncRun.id.desc())
+        ).first()
+        if running is None:
+            # A database that reports a uniqueness conflict must expose the
+            # conflicting committed row after the transaction rollback.
+            raise RuntimeError("Sync reservation conflicted without a running sync")
+        return running, False
 
 
 def get_or_create_schedule(db: Session) -> SyncSchedule:
@@ -70,8 +99,34 @@ class SyncCancelled(Exception):
 
 
 def _append_log(db: Session, run: SyncRun, message: str) -> None:
-    run.log_text = f"{run.log_text or ''}{message}\n"
-    db.commit()
+    """Publish one log line without committing the sync transaction."""
+    status_db = _status_session(db)
+    if status_db is None:
+        # An in-memory SQLite database has one physical connection, so a
+        # second Session would commit the sync transaction too.  Keep tests
+        # and other such ephemeral deployments safe rather than live.
+        run.log_text = f"{run.log_text or ''}{message}\n"
+        return
+    try:
+        persisted_run = status_db.get(SyncRun, run.id)
+        if persisted_run is None:
+            raise RuntimeError(f"Sync run {run.id} disappeared")
+        persisted_run.log_text = f"{persisted_run.log_text or ''}{message}\n"
+        status_db.commit()
+    finally:
+        status_db.close()
+
+
+def _status_session(db: Session) -> Session | None:
+    """Return an isolated short-lived status session when one is possible."""
+    bind = db.get_bind()
+    # SQLAlchemy's in-memory SQLite URLs are backed by a single connection in
+    # this project’s tests.  A "separate" Session there is not a separate
+    # transaction and may commit staged worklogs, so deliberately fall back.
+    database = getattr(getattr(bind, "url", None), "database", None)
+    if bind.dialect.name == "sqlite" and database in (None, ":memory:"):
+        return None
+    return Session(bind=bind, autoflush=False)
 
 
 def _progress(
@@ -83,16 +138,56 @@ def _progress(
     total: int | None,
     log: str | None = None,
 ) -> None:
-    run.progress_phase = phase
-    run.progress_current = current
-    run.progress_total = total
-    if log is not None:
-        run.log_text = f"{run.log_text or ''}{log}\n"
-    db.commit()
-    # expire_on_commit means this re-reads the row, picking up a cancel
-    # request made by a concurrent request between checkpoints.
-    if run.cancel_requested:
+    status_db = _status_session(db)
+    if status_db is None:
+        run.progress_phase = phase
+        run.progress_current = current
+        run.progress_total = total
+        if log is not None:
+            run.log_text = f"{run.log_text or ''}{log}\n"
+        cancel_requested = run.cancel_requested
+    else:
+        try:
+            persisted_run = status_db.get(SyncRun, run.id)
+            if persisted_run is None:
+                raise RuntimeError(f"Sync run {run.id} disappeared")
+            persisted_run.progress_phase = phase
+            persisted_run.progress_current = current
+            persisted_run.progress_total = total
+            if log is not None:
+                persisted_run.log_text = f"{persisted_run.log_text or ''}{log}\n"
+            cancel_requested = persisted_run.cancel_requested
+            status_db.commit()
+        finally:
+            status_db.close()
+    if cancel_requested:
         raise SyncCancelled()
+
+
+def _finish_terminal_run(
+    db: Session, run_id: int, *, status: str, error: str | None, log_message: str
+) -> SyncRun:
+    """Persist a cancelled/failed run after the data transaction rolled back."""
+    status_db = _status_session(db)
+    owns_status_session = status_db is not None
+    if status_db is None:
+        status_db = db
+    try:
+        run = status_db.get(SyncRun, run_id, with_for_update=True)
+        if run is None:
+            raise RuntimeError(f"Sync run {run_id} disappeared")
+        run.status = status
+        run.finished_at = _utcnow()
+        run.error = error
+        run.log_text = f"{run.log_text or ''}{log_message}\n"
+        status_db.commit()
+    finally:
+        if owns_status_session:
+            status_db.close()
+    result = db.get(SyncRun, run_id)
+    if result is None:
+        raise RuntimeError(f"Sync run {run_id} disappeared")
+    return result
 
 
 def _issue_key_from_worklog(worklog: dict) -> str | None:
@@ -111,22 +206,31 @@ def _project_from_key(issue_key: str | None) -> str | None:
     return issue_key.split("-", 1)[0]
 
 
-def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
+def run_sync(
+    db: Session, jira_client: JiraClient | None = None, *, run_id: int | None = None
+) -> SyncRun:
     """Run one atomic incremental synchronization.
 
-    The initial SyncRun commit is deliberately separate so status readers can
-    observe the running job. All synchronized data and the cursor commit once.
+    The initial SyncRun reservation is deliberately committed separately so
+    status readers can observe the running job and its database unique index
+    protects every trigger path. All synchronized data, cursor movement, and
+    terminal success state commit once.
+
+    Progress and logs are published through isolated short-lived status
+    sessions.  The main transaction never commits them independently, so
+    staged worklogs and the watermark remain atomic.
     """
-    run = SyncRun(
-        started_at=_utcnow(),
-        status="running",
-        worklogs_upserted=0,
-        worklogs_deleted=0,
-        log_text="Sync started\n",
-    )
-    db.add(run)
-    db.commit()
-    run_id = run.id
+    if run_id is None:
+        run, reserved = reserve_sync_run(db)
+        if not reserved:
+            return run
+        run_id = run.id
+    else:
+        run = db.get(SyncRun, run_id)
+        if run is None:
+            raise RuntimeError(f"Sync run {run_id} does not exist")
+        if run.status != "running":
+            return run
 
     client = jira_client or JiraClient()
     owns_client = jira_client is None
@@ -138,9 +242,6 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         if state is None:
             state = SyncState(id=1, last_watermark=None)
             db.add(state)
-            # Persist the required singleton without moving its cursor. This
-            # is setup state, not part of the synchronized-data transaction.
-            db.commit()
 
         since = _epoch_millis(state.last_watermark)
         updated_changes, updated_until = client.get_updated_worklog_ids(
@@ -338,8 +439,6 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
                 db.delete(existing)
                 deleted_count += 1
 
-        run.worklogs_upserted = len(in_scope)
-        run.worklogs_deleted = deleted_count
         _append_log(db, run, f"Upserted {len(in_scope)} worklogs")
         _append_log(db, run, f"Deleted {deleted_count} worklogs")
 
@@ -348,38 +447,43 @@ def run_sync(db: Session, jira_client: JiraClient | None = None) -> SyncRun:
         if until_values:
             state.last_watermark = _watermark_datetime(max(until_values))
 
+        # Flush staged data, then lock and refresh the run.  This picks up all
+        # independently committed progress/log entries and makes the final
+        # cancellation check atomic with the success transition.  The lock is
+        # held only for this final database commit, never over Jira I/O.
+        db.flush()
+        db.refresh(run, with_for_update=True)
+        if run.cancel_requested:
+            raise SyncCancelled()
+        run.worklogs_upserted = len(in_scope)
+        run.worklogs_deleted = deleted_count
         run.status = "success"
         run.finished_at = _utcnow()
         run.progress_phase = "Completed"
         run.progress_current = run.progress_total or 0
-        _append_log(db, run, "Sync completed successfully")
+        run.log_text = f"{run.log_text or ''}Sync completed successfully\n"
         db.commit()
         db.refresh(run)
         return run
     except SyncCancelled:
-        progress_log = run.log_text
         db.rollback()
-        cancelled_run = db.get(SyncRun, run_id)
-        if cancelled_run is None:
-            raise RuntimeError(f"Sync run {run_id} disappeared") from None
-        cancelled_run.status = "cancelled"
-        cancelled_run.finished_at = _utcnow()
-        cancelled_run.log_text = progress_log
-        _append_log(db, cancelled_run, "Sync cancelled by user")
-        db.commit()
-        return cancelled_run
+        return _finish_terminal_run(
+            db,
+            run_id,
+            status="cancelled",
+            error=None,
+            log_message="Sync cancelled by user",
+        )
     except Exception as exc:
-        progress_log = run.log_text
         db.rollback()
-        failed_run = db.get(SyncRun, run_id)
-        if failed_run is None:
-            raise RuntimeError(f"Sync run {run_id} disappeared") from exc
-        failed_run.status = "failed"
-        failed_run.finished_at = _utcnow()
-        failed_run.error = str(exc) or exc.__class__.__name__
-        failed_run.log_text = progress_log
-        _append_log(db, failed_run, f"Sync failed: {failed_run.error}")
-        db.commit()
+        error = str(exc) or exc.__class__.__name__
+        _finish_terminal_run(
+            db,
+            run_id,
+            status="failed",
+            error=error,
+            log_message=f"Sync failed: {error}",
+        )
         raise
     finally:
         if owns_client:

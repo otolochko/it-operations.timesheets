@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core import db as db_module
@@ -14,6 +13,7 @@ from app.routers import sync as sync_router
 from app.services import scheduler as scheduler_module
 from apscheduler.triggers.cron import CronTrigger
 from tests.conftest import build_sqlite_engine
+from tests.asgi_client import ASGITestClient
 
 
 @pytest.fixture(autouse=True)
@@ -39,20 +39,17 @@ def app():
 
 @pytest.fixture
 def client(app):
-    return TestClient(app)
+    return ASGITestClient(app)
 
 
-def _fake_run_sync(db: Session) -> SyncRun:
+def _fake_run_sync(db: Session, *, run_id: int) -> SyncRun:
     """Fast stand-in for the real sync -- avoids mocking a JiraClient here."""
-    now = datetime.now(timezone.utc)
-    run = SyncRun(
-        started_at=now,
-        finished_at=now,
-        status="success",
-        worklogs_upserted=3,
-        worklogs_deleted=1,
-    )
-    db.add(run)
+    run = db.get(SyncRun, run_id)
+    assert run is not None
+    run.finished_at = datetime.now(timezone.utc)
+    run.status = "success"
+    run.worklogs_upserted = 3
+    run.worklogs_deleted = 1
     db.commit()
     db.refresh(run)
     return run
@@ -189,7 +186,7 @@ def test_trigger_worklogs_returns_run_id_visible_in_status(client, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["run_id"] > 0
-    assert body["status"] == "success"
+    assert body["status"] == "running"
 
     status_response = client.get("/api/sync/status")
     assert status_response.json()["latest_run"]["id"] == body["run_id"]
@@ -247,7 +244,7 @@ def test_run_sync_job_skips_when_a_run_is_already_in_progress(monkeypatch):
 
     called = False
 
-    def _fail_if_called(db):
+    def _fail_if_called(db, *, run_id):
         nonlocal called
         called = True
 

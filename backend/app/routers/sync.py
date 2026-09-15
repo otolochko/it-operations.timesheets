@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,7 +21,7 @@ from app.schemas.sync import (
     SyncTriggerResponse,
 )
 from app.services.scheduler import get_scheduler, reschedule, validate_cron
-from app.services.sync_service import get_or_create_schedule, run_sync
+from app.services.sync_service import get_or_create_schedule, reserve_sync_run, run_sync
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -40,10 +39,10 @@ def _schedule_response(schedule: SyncSchedule) -> SyncScheduleResponse:
     )
 
 
-def _run_sync_in_background() -> None:
+def _run_sync_in_background(run_id: int) -> None:
     db = db_module.SessionLocal()
     try:
-        run_sync(db)
+        run_sync(db, run_id=run_id)
     finally:
         db.close()
 
@@ -52,40 +51,17 @@ def _run_sync_in_background() -> None:
 def trigger_sync(db: Session = Depends(get_db)) -> SyncTriggerResponse:
     """Trigger a sync run without blocking on its full duration.
 
-    `run_sync` commits its "running" SyncRun row synchronously before doing
-    any Jira network calls. We run it on a background thread (rather than
-    FastAPI's BackgroundTasks, whose callback only executes *after* the
-    response is sent -- too late to read back a run id) and poll briefly for
-    that row to appear, since the row is committed almost immediately.
-
-    Refuses to start a second run while one is already in progress: run_sync
-    reads/advances the single-row `sync_state` watermark, so two concurrent
-    runs would race on that row and could corrupt the watermark or double up
-    on Jira calls.
+    The running row is reserved synchronously by a database-enforced unique
+    constraint, before the worker is started.  This closes the race between
+    simultaneous HTTP requests and scheduled jobs.
     """
-    running = _latest_run(db)
-    if running is not None and running.status == "running":
-        return SyncTriggerResponse(run_id=running.id, status=running.status)
+    run, reserved = reserve_sync_run(db)
+    if not reserved:
+        return SyncTriggerResponse(run_id=run.id, status=run.status)
 
-    before_id = db.scalars(select(SyncRun.id).order_by(SyncRun.id.desc())).first() or 0
-
-    thread = threading.Thread(target=_run_sync_in_background, daemon=True)
+    thread = threading.Thread(target=_run_sync_in_background, args=(run.id,), daemon=True)
     thread.start()
-
-    run_id: int | None = None
-    for _ in range(200):  # up to ~2s at 10ms intervals
-        db.expire_all()
-        latest = _latest_run(db)
-        if latest is not None and latest.id > before_id:
-            run_id = latest.id
-            status = latest.status
-            break
-        time.sleep(0.01)
-
-    if run_id is None:
-        raise HTTPException(status_code=500, detail="Sync run did not start in time")
-
-    return SyncTriggerResponse(run_id=run_id, status=status)
+    return SyncTriggerResponse(run_id=run.id, status=run.status)
 
 
 @router.post("/worklogs/cancel", response_model=SyncTriggerResponse)
@@ -96,8 +72,14 @@ def cancel_sync(db: Session = Depends(get_db)) -> SyncTriggerResponse:
     (between Jira calls), so the run stops shortly after this returns, not
     immediately.
     """
-    running = _latest_run(db)
-    if running is None or running.status != "running":
+    # Lock the row while checking its state.  This cannot race a worker's
+    # final locked cancellation check/success transition.
+    running = db.scalars(
+        select(SyncRun)
+        .where(SyncRun.status == "running")
+        .with_for_update()
+    ).first()
+    if running is None:
         raise HTTPException(status_code=409, detail="No sync run is currently in progress")
 
     running.cancel_requested = True

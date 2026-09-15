@@ -15,6 +15,7 @@ const mockedApi = vi.mocked(api);
 
 describe('SyncStatusPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
   });
 

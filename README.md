@@ -105,7 +105,9 @@ docker compose up -d postgres
 
 # Run backend migrations and server
 cd backend
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements-dev.txt
 alembic upgrade head
 uvicorn app.main:app --reload
 
@@ -149,6 +151,9 @@ All configuration is driven by environment variables defined in `.env`:
 | `SYNC_DEFAULT_CRON` | Default 5-field cron schedule for automatic sync | `0 * * * *` |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed browser origins | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend URL consumed by the frontend client | `http://localhost:8000` |
+
+`NEXT_PUBLIC_API_BASE_URL` is a frontend build-time value. Rebuild the frontend image after
+changing it; do not place Jira or database credentials in any `NEXT_PUBLIC_*` variable.
 
 ---
 
@@ -220,6 +225,6 @@ All configuration is driven by environment variables defined in `.env`:
 Production deployments are containerized using Docker Compose:
 
 - **Isolated Build Contexts**: Container `.dockerignore` files prevent local environment files or development artifacts from leaking into image layers.
-- **Network Boundaries**: The application has no user authentication and must be placed behind an internal VPN or private network ingress with reverse proxy TLS termination.
+- **Network Boundaries**: Compose binds service ports to loopback only. The application has no user authentication and must be placed behind an authenticated corporate VPN/SSO ingress with reverse proxy TLS termination.
 
 For step-by-step installation, reverse proxy configuration, and zero-downtime database upgrade instructions, see [`docs/deployment.md`](docs/deployment.md).

@@ -1,6 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+
+ProjectKey = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
 
 
 class SyncRunSummary(BaseModel):
@@ -37,6 +42,18 @@ class SyncScheduleResponse(BaseModel):
 
 
 class SyncScheduleUpdateRequest(BaseModel):
-    cron_expression: str
-    project_keys: list[str] | None = None
-    jql_filter: str | None = None
+    cron_expression: str = Field(min_length=1, max_length=128)
+    project_keys: list[ProjectKey] | None = Field(default=None, max_length=100)
+    jql_filter: str | None = Field(default=None, max_length=10_000)
+
+    @field_validator("project_keys")
+    @classmethod
+    def validate_project_keys(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        if len(set(value)) != len(value):
+            raise ValueError("project_keys must not contain duplicates")
+        for key in value:
+            if "," in key or any(ord(character) < 0x20 for character in key):
+                raise ValueError("project_keys contain an invalid character")
+        return value

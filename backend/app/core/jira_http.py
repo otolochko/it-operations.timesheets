@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -29,6 +30,7 @@ class JiraClient:
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.base_url = (base_url or settings.jira_base_url).rstrip("/")
+        self._base_origin = urlsplit(self.base_url)
         self.max_retries = (
             settings.jira_max_retries if max_retries is None else max_retries
         )
@@ -47,6 +49,24 @@ class JiraClient:
             timeout=settings.jira_timeout_seconds if timeout_seconds is None else timeout_seconds,
         )
         self.last_deleted_until: int | None = None
+
+    def _trusted_next_page_url(self, next_page: str) -> str:
+        """Resolve a Jira pagination URL but never follow it off-origin.
+
+        ``nextPage`` is server-supplied data.  Treating it as an arbitrary URL
+        would turn a compromised Jira response into an SSRF primitive carrying
+        the Jira basic-auth header.
+        """
+        resolved = urljoin(f"{self.base_url}/", next_page)
+        parsed = urlsplit(resolved)
+        if (
+            parsed.scheme != self._base_origin.scheme
+            or parsed.netloc != self._base_origin.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
+            raise ValueError("Jira returned a pagination URL outside the configured origin")
+        return resolved
 
     def close(self) -> None:
         if self._owns_client:
@@ -128,7 +148,9 @@ class JiraClient:
             next_page = payload.get("nextPage")
             if payload.get("lastPage", next_page is None) or not next_page:
                 break
-            url = next_page
+            if not isinstance(next_page, str):
+                raise ValueError("Jira returned an invalid pagination URL")
+            url = self._trusted_next_page_url(next_page)
             params = None
 
         return values, max_until
@@ -185,6 +207,9 @@ class JiraClient:
         """
         if not issue_ids:
             return []
+
+        if any(not issue_id.isdecimal() for issue_id in issue_ids):
+            raise ValueError("Jira issue IDs must be decimal values")
 
         url = f"{self.base_url}/rest/api/3/search/jql"
         issues: list[dict] = []
