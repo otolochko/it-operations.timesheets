@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import Base
 from app.models import Issue, SyncRun, SyncState, Worklog
-from app.services.sync_service import get_or_create_schedule, run_sync
+from app.services.sync_service import get_or_create_schedule, reserve_sync_run, run_sync
 
 
 class FakeJiraClient:
@@ -99,6 +99,16 @@ def test_progress_reflects_completion(db: Session) -> None:
 
     assert result.progress_phase == "Completed"
     assert result.progress_current == result.progress_total
+
+
+def test_reservation_is_database_enforced_single_flight(db: Session) -> None:
+    first, reserved_first = reserve_sync_run(db)
+    second, reserved_second = reserve_sync_run(db)
+
+    assert reserved_first is True
+    assert reserved_second is False
+    assert second.id == first.id
+    assert db.scalars(select(SyncRun).where(SyncRun.status == "running")).all() == [first]
 
 
 def test_cancel_requested_stops_the_run_without_writing_data(db: Session) -> None:
@@ -196,6 +206,63 @@ def test_failure_rolls_back_and_retry_is_safe(db: Session) -> None:
     success = run_sync(db, FakeJiraClient(data, issues))
     assert success.status == "success"
     assert {row.id for row in db.scalars(select(Worklog))} == {"500", "501"}
+
+
+def test_failure_after_staging_worklogs_rolls_back_data_and_watermark(db: Session) -> None:
+    """No status/log update may accidentally commit staged sync data."""
+    old_watermark = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    db.add(SyncState(id=1, last_watermark=old_watermark))
+    db.commit()
+
+    class FailWhenComputingDeletionWatermark(FakeJiraClient):
+        @property
+        def last_deleted_until(self):
+            raise RuntimeError("failure after worklog staging")
+
+        @last_deleted_until.setter
+        def last_deleted_until(self, value):
+            self._last_deleted_until = value
+
+    with pytest.raises(RuntimeError, match="after worklog staging"):
+        run_sync(db, FailWhenComputingDeletionWatermark([worklog()], {"100": issue()}))
+
+    assert db.scalars(select(Worklog)).all() == []
+    assert db.get(SyncState, 1).last_watermark == old_watermark.replace(tzinfo=None)
+    assert db.scalars(select(SyncRun).order_by(SyncRun.id.desc())).first().status == "failed"
+
+
+def test_live_progress_does_not_commit_staged_worklogs_on_file_sqlite(tmp_path) -> None:
+    """The separate status transaction must not make sync data durable."""
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'sync.db'}")
+    Base.metadata.create_all(engine)
+
+    class ProgressThenFail(FakeJiraClient):
+        def get_updated_worklog_ids(self, since, *, on_page=None):
+            changes, until = super().get_updated_worklog_ids(since, on_page=on_page)
+            if on_page is not None:
+                on_page(1, len(changes))
+            return changes, until
+
+        @property
+        def last_deleted_until(self):
+            raise RuntimeError("failure after staged data")
+
+        @last_deleted_until.setter
+        def last_deleted_until(self, value):
+            self._last_deleted_until = value
+
+    try:
+        with Session(engine, autoflush=False) as session:
+            with pytest.raises(RuntimeError, match="after staged data"):
+                run_sync(session, ProgressThenFail([worklog()], {"100": issue()}))
+
+        with Session(engine) as check_db:
+            assert check_db.scalars(select(Worklog)).all() == []
+            run = check_db.scalars(select(SyncRun).order_by(SyncRun.id.desc())).first()
+            assert run.status == "failed"
+            assert "Updated worklog ids: page 1" in run.log_text
+    finally:
+        engine.dispose()
 
 
 def test_success_advances_watermark(db: Session) -> None:

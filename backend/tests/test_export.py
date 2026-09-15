@@ -14,8 +14,8 @@ from app.main import app
 from app.models import Issue, Worklog
 from app.services.export_service import build_csv, build_xlsx
 from app.services.timesheet_service import get_all_issue_totals
-from fastapi.testclient import TestClient
 from tests.conftest import build_sqlite_engine
+from tests.asgi_client import ASGITestClient
 
 
 def _sqlite_date_trunc(unit: str, value: str) -> str:
@@ -53,8 +53,7 @@ def client(engine):
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    yield ASGITestClient(app)
     app.dependency_overrides.clear()
 
 

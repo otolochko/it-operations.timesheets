@@ -1,6 +1,11 @@
 .env
+.env.*
 .venv
 __pycache__
 *.pyc
 tests
 .git
+.gitignore
+.pytest_cache
+.mypy_cache
+*.log

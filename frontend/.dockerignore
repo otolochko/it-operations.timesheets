@@ -1,4 +1,8 @@
 .env
+.env.*
 node_modules
 .next
 .git
+.gitignore
+coverage
+*.log

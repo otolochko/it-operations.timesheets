@@ -54,10 +54,10 @@ Operational router, universal invariants, execution commands, and environment de
 | `JIRA_PROJECT_KEYS` | Comma-separated list of Jira project keys to sync (e.g. `PROJ1,PROJ2`) |
 | `SYNC_DEFAULT_CRON` | Fallback 5-field cron expression for background sync (e.g. `0 * * * *`) |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed origins (defaults to `http://localhost:3000`, never `*`) |
-| `NEXT_PUBLIC_API_BASE_URL` | Backend URL consumed by frontend client (defaults to `http://localhost:8000`) |
+| `NEXT_PUBLIC_API_BASE_URL` | Frontend build-time backend URL consumed by the browser (defaults to `http://localhost:8000`) |
 
 ## Known Limitations
 
-- **No application-level authentication**: The application contains no login or user management; deployment must be restricted to an internal private network, and `CORS_ALLOWED_ORIGINS` must match the specific frontend host, never `*`.
+- **No application-level authentication**: The application contains no login or user management; deployment must use authenticated VPN/SSO at the reverse proxy, keep Compose ports loopback-only, and set `CORS_ALLOWED_ORIGINS` to the specific frontend host, never `*`.
 - **Global worklog change feed**: Jira Cloud `worklog/updated` and `worklog/deleted` endpoints return changes across the entire instance. The sync engine fetches worklog and issue details globally and filters by project key afterwards; initial syncs for large organizations can take significant time.
 - **Fixed ISO week start**: Week aggregation uses PostgreSQL `date_trunc('week', work_date)`, which defaults to ISO weeks starting on Monday with no option for alternative week starts.

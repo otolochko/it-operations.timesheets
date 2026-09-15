@@ -146,6 +146,23 @@ def test_updated_feed_pages_and_worklog_list_chunks() -> None:
     assert posted_sizes == [1000, 1000, 1]
 
 
+def test_updated_feed_refuses_cross_origin_next_page() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(
+            200,
+            json={"values": [], "lastPage": False, "nextPage": "https://attacker.test/steal"},
+            request=request,
+        )
+
+    with pytest.raises(ValueError, match="outside the configured origin"):
+        _client(handler).get_updated_worklog_ids(0)
+    assert calls == 1
+
+
 def test_get_issues_by_ids_batches_and_omits_missing() -> None:
     requests = []
 
@@ -178,3 +195,8 @@ def test_get_issues_by_ids_returns_empty_for_no_ids() -> None:
         raise AssertionError("should not make a request for an empty id list")
 
     assert _client(handler).get_issues_by_ids([]) == []
+
+
+def test_get_issues_by_ids_rejects_non_numeric_values() -> None:
+    with pytest.raises(ValueError, match="decimal"):
+        _client(lambda request: None).get_issues_by_ids(["1)", "jql"])

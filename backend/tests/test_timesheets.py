@@ -8,8 +8,8 @@ from app.core.db import get_db
 from app.core.worklog_time import work_date_from_jira_json
 from app.main import app
 from app.models import Issue, Worklog
-from fastapi.testclient import TestClient
 from tests.conftest import build_sqlite_engine
+from tests.asgi_client import ASGITestClient
 
 
 def _sqlite_date_trunc(unit: str, value: str) -> str:
@@ -55,8 +55,7 @@ def client(engine):
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
+    yield ASGITestClient(app)
     app.dependency_overrides.clear()
 
 

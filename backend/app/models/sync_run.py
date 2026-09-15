@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -10,6 +10,19 @@ class SyncRun(Base):
     """Per-run history for the sync status UI (last sync status / log viewer)."""
 
     __tablename__ = "sync_runs"
+    # This is the cross-process single-flight guard.  A partial unique index
+    # allows an unlimited history of terminal runs while making two committed
+    # ``running`` rows impossible.  It is supported by both production
+    # PostgreSQL and SQLite, which keeps the concurrency contract testable.
+    __table_args__ = (
+        Index(
+            "uq_sync_runs_single_running",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'running'"),
+            sqlite_where=text("status = 'running'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
